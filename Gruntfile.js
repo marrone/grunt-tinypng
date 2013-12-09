@@ -12,46 +12,38 @@ module.exports = function(grunt) {
 
   // Project configuration.
   grunt.initConfig({
-    jshint: {
-      all: [
-        'Gruntfile.js',
-        'tasks/*.js',
-        '<%= nodeunit.tests %>',
-      ],
-      options: {
-        jshintrc: '.jshintrc',
+      jshint: {
+          all: [
+              'Gruntfile.js',
+              'tasks/*.js',
+              '<%= nodeunit.tests %>'
+          ],
+          options: {
+              jshintrc: '.jshintrc'
+          }
       },
-    },
 
-    // Before generating any new files, remove any previously-created files.
-    clean: {
-      tests: ['tmp'],
-    },
-
-    // Configuration to be run (and then tested).
-    tinypng: {
-      default_options: {
-        options: {
-        },
-        files: {
-          'tmp/default_options': ['test/fixtures/testing', 'test/fixtures/123'],
-        },
+      // Before generating any new files, remove any previously-created files.
+      clean: {
+          tests: ['tmp']
       },
-      custom_options: {
-        options: {
-          separator: ': ',
-          punctuation: ' !!!',
-        },
-        files: {
-          'tmp/custom_options': ['test/fixtures/testing', 'test/fixtures/123'],
-        },
-      },
-    },
 
-    // Unit tests.
-    nodeunit: {
-      tests: ['test/*_test.js'],
-    },
+      // Configuration to be run (and then tested).
+      tinypng: {
+          default_options: {
+              options: {
+                  apiKey: ''
+              },
+              files: {
+                  '/tmp/large.min.png': 'test/fixtures/large.png'
+              }
+          }
+      },
+
+      // Unit tests.
+      nodeunit: {
+          tests: ['test/*_test.js'],
+      }
 
   });
 

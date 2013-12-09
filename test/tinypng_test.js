@@ -1,6 +1,7 @@
 'use strict';
 
-var grunt = require('grunt');
+var grunt = require('grunt'),
+    fs = require("fs");
 
 /*
   ======== A Handy Little Nodeunit Reference ========
@@ -28,21 +29,25 @@ exports.tinypng = {
     done();
   },
   default_options: function(test) {
-    test.expect(1);
+    test.expect(2);
 
-    var actual = grunt.file.read('tmp/default_options');
-    var expected = grunt.file.read('test/expected/default_options');
-    test.equal(actual, expected, 'should describe what the default behavior is.');
+    fs.stat('test/fixtures/large.png', function(err, origStats) { 
+        if(err) {
+            test.done();
+            return;
+        }
 
-    test.done();
-  },
-  custom_options: function(test) {
-    test.expect(1);
+        fs.stat('/tmp/large.min.png', function(err, minStats) { 
+            if(err) {
+                test.done();
+                return;
+            }
 
-    var actual = grunt.file.read('tmp/custom_options');
-    var expected = grunt.file.read('test/expected/custom_options');
-    test.equal(actual, expected, 'should describe what the custom option(s) behavior is.');
+            test.ok(minStats.size > 0, "should be greater than 0 bytes");
+            test.ok(minStats.size < origStats.size / 2, "minified bytes should be less than half the original");
+            test.done();
+        });
 
-    test.done();
-  },
+    });
+  }
 };
