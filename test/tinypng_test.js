@@ -77,14 +77,14 @@ exports.tinypng = {
 
             var sigs = JSON.parse(data);
             test.equal(typeof data, 'object');
-            test.ok(minImgPath in sigs);
-            test.equal(sigs[minImgPath].length, 32);
+            test.ok(origImgPath in sigs);
+            test.equal(sigs[origImgPath].length, 32);
 
             var md5 = crypto.createHash("md5"),
-                stream = fs.ReadStream(minImgPath);
+                stream = fs.ReadStream(origImgPath);
             stream.on("data", function(d) { md5.update(d); });
             stream.on("end", function() {
-                test.equal(md5.digest("hex"), sigs[minImgPath]);
+                test.equal(md5.digest("hex"), sigs[origImgPath]);
                 doneSigs = true;
                 if(doneStats && doneSigs) {
                     test.done();

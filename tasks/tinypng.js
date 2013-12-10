@@ -56,7 +56,7 @@ module.exports = function(grunt) {
             }
         }
 
-        function handleAPIResponseSuccess(res, dest) {
+        function handleAPIResponseSuccess(res, dest, srcpath) {
             var imageLocation = res.headers.location;
             grunt.verbose.writeln("making request to get image at " + imageLocation);
 
@@ -76,8 +76,8 @@ module.exports = function(grunt) {
                     grunt.log.writeln("wrote minified image to " + dest);
                     fileCount--;
                     if(options.checkSigs) {
-                        getFileHash(dest, function(fp, hash) {
-                            fileSigs[dest] = hash;
+                        getFileHash(srcpath, function(fp, hash) {
+                            fileSigs[srcpath] = hash;
                             checkDone();
                         });
                     }
@@ -103,12 +103,12 @@ module.exports = function(grunt) {
             });
         }
 
-        function handleAPIResponse(res, dest) {
+        function handleAPIResponse(res, dest, srcpath) {
             grunt.verbose.writeln("API RESPONSE STATUS: " + res.statusCode);
             grunt.verbose.writeln("HEADERS: " + JSON.stringify(res.headers));
 
             if(res.statusCode === 201 && !!res.headers.location) {
-                handleAPIResponseSuccess(res, dest);
+                handleAPIResponseSuccess(res, dest, srcpath);
             }
             else {
                 handleAPIResponseError(res);
@@ -139,7 +139,7 @@ module.exports = function(grunt) {
             grunt.verbose.writeln("Processing image at " + filepath);
 
             var req = https.request(reqOpts, function(res) { 
-                handleAPIResponse(res, dest); 
+                handleAPIResponse(res, dest, filepath); 
             });
 
             req.on("error", function(e) {
@@ -164,8 +164,8 @@ module.exports = function(grunt) {
                 }
 
                 if(!grunt.option("force") && options.checkSigs && grunt.file.exists(f.dest)) {
-                    grunt.verbose.writeln("comparing hash of minified image at " + f.dest);
-                    compareFileHash(f.dest, fileSigs[f.dest], function(fp, matches) {
+                    grunt.verbose.writeln("comparing hash of image at " + filepath);
+                    compareFileHash(filepath, fileSigs[filepath], function(fp, matches) {
                         if(!matches) { 
                             processImage(filepath, f.dest);
                         }

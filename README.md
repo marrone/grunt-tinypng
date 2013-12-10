@@ -50,7 +50,8 @@ Default value: `false`
 Whether or not to compare existing dest file md5 signatures against those found in the `options.sigFile` json data.
 When the signatures match, the file is skipped from being minified again, allowing you to better stay within your API request limits.
 You can pass --force as a command line option to force the image to be minified whether or not the signatures match.
-When an image is minified, and `options.checkSigs` is true, the md5 signature is determined and written to the file at `options.sigFile`
+When an image is minified, and `options.checkSigs` is true, the md5 signature is determined and written to the file at `options.sigFile`.
+Signatures are based off the unminified source image, so that when the source changes it will be re-minified and re-written to the destination file.
 
 #### options.sigFile
 Type: `String`
