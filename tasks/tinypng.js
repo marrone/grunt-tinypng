@@ -6,23 +6,31 @@
  * Licensed under the MIT license.
  */
 
-'use strict';
-
 module.exports = function(grunt) {
+
+    'use strict';
 
     // Please see the Grunt documentation for more information regarding task
     // creation: http://gruntjs.com/creating-tasks
 
     var fs = require("fs"),
+        path = require("path"),
         https = require("https"),
-        url = require("url");
+        url = require("url"),
+        crypto = require("crypto");
 
     grunt.registerMultiTask('tinypng', 'image optimization via tinypng service', function() {
 
         // Merge task-specific and/or target-specific options with these defaults.
         var options = this.options({
-            apiKey: ''
+            apiKey: '',
+            checkSigs: false,
+            sigFile: ''
         });
+
+        if(options.checkSigs && !options.sigFile) {
+            grunt.log.error("sigFile option required when specifying checkSigs option");
+        }
 
         var done = this.async(),
             fileCount = 0,
@@ -36,7 +44,17 @@ module.exports = function(grunt) {
                 requestCert: true,
                 agent: false,
                 auth: 'api:' + options.apiKey
-            };
+            },
+            fileSigs = options.checkSigs && grunt.file.exists(options.sigFile) && grunt.file.readJSON(options.sigFile) || {};
+
+        function checkDone() {
+            if(fileCount <= 0) {
+                if(options.checkSigs) {
+                    grunt.file.write(options.sigFile, JSON.stringify(fileSigs));
+                }
+                done();
+            }
+        }
 
         function handleAPIResponseSuccess(res, dest) {
             var imageLocation = res.headers.location;
@@ -50,18 +68,26 @@ module.exports = function(grunt) {
             https.get(urlInfo, function(imageRes) {
                 grunt.verbose.writeln("minified image request response status code is " + imageRes.statusCode);
 
-                if(imageRes.statusCode >= 200 && imageRes.statusCode < 300) { 
-                    imageRes.on("end", function() { 
-                        if(--fileCount <= 0) { 
-                            grunt.log.writeln("wrote minified image to " + dest);
-                            done();
-                        }
-                    });
-                    imageRes.pipe(fs.createWriteStream(dest));
-                }
-                else {
+                if(imageRes.statusCode >= 300) {
                     grunt.log.error("got bad status code " + imageRes.statusCode);
                 }
+
+                imageRes.on("end", function() { 
+                    grunt.log.writeln("wrote minified image to " + dest);
+                    fileCount--;
+                    if(options.checkSigs) {
+                        getFileHash(dest, function(fp, hash) {
+                            fileSigs[dest] = hash;
+                            checkDone();
+                        });
+                    }
+                    else {
+                        checkDone();
+                    }
+                });
+                grunt.file.mkdir(path.dirname(dest));
+                imageRes.pipe(fs.createWriteStream(dest));
+
             }).on("error", function(e) {
                 grunt.log.error("got error, " + e.message + ", making request for minified image at " + imageLocation);
             });
@@ -89,6 +115,45 @@ module.exports = function(grunt) {
             }
         }
 
+        function getFileHash(filepath, callback) {
+            var md5 = crypto.createHash("md5"),
+                stream = fs.ReadStream(filepath);
+            stream.on("data", function(d) { md5.update(d); });
+            stream.on("end", function() {
+                callback(filepath, md5.digest("hex"));
+            });
+        }
+
+        function compareFileHash(filepath, expectedHash, callback) {
+            if(!expectedHash) {
+                callback(filepath, false);
+            }
+            else { 
+                getFileHash(filepath, function(fp, hash) {
+                    callback(filepath, hash === expectedHash);
+                });
+            }
+        }
+
+        function processImage(filepath, dest) { 
+            grunt.verbose.writeln("Processing image at " + filepath);
+
+            var req = https.request(reqOpts, function(res) { 
+                handleAPIResponse(res, dest); 
+            });
+
+            req.on("error", function(e) {
+                grunt.log.error("problem with request: " + e.message);
+            });
+
+            // stream the image data as the request POST body
+            var stream = fs.createReadStream(filepath);
+            stream.on("end", function() {
+                req.end();
+            });
+            stream.pipe(req);
+        }
+
         // Iterate over all specified file groups.
         this.files.forEach(function(f) {
             f.src.forEach(function(filepath) {
@@ -98,22 +163,21 @@ module.exports = function(grunt) {
                     return;
                 }
 
-                grunt.verbose.writeln("Processing image at " + filepath);
-
-                var req = https.request(reqOpts, function(res) { 
-                    handleAPIResponse(res, f.dest); 
-                });
-
-                req.on("error", function(e) {
-                    grunt.log.error("problem with request: " + e.message);
-                });
-
-                // stream the image data as the request POST body
-                var stream = fs.createReadStream(filepath);
-                stream.on("end", function() {
-                    req.end();
-                });
-                stream.pipe(req);
+                if(!grunt.option("force") && options.checkSigs && grunt.file.exists(f.dest)) {
+                    grunt.verbose.writeln("comparing hash of minified image at " + f.dest);
+                    compareFileHash(f.dest, fileSigs[f.dest], function(fp, matches) {
+                        if(!matches) { 
+                            processImage(filepath, f.dest);
+                        }
+                        else {
+                            fileCount--;
+                            grunt.verbose.writeln("file sig matches, skipping minification of file at " + filepath);
+                        }
+                    });
+                }
+                else {
+                    processImage(filepath, f.dest);
+                }
 
                 fileCount++;
             }); 

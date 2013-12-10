@@ -39,9 +39,24 @@ grunt.initConfig({
 
 #### options.apiKey
 Type: `String`
-Default value: `',  '`
+Default value: `''`
 
 Your required api key. Get one at https://tinypng.com/developers
+
+#### options.checkSigs
+Type: `Boolean`
+Default value: `false`
+
+Whether or not to compare existing dest file md5 signatures against those found in the `options.sigFile` json data.
+When the signatures match, the file is skipped from being minified again, allowing you to better stay within your API request limits.
+You can pass --force as a command line option to force the image to be minified whether or not the signatures match.
+When an image is minified, and `options.checkSigs` is true, the md5 signature is determined and written to the file at `options.sigFile`
+
+#### options.sigFile
+Type: `String`
+Default value: `''`
+
+The file location to write the minified image md5 signatures to when using the `options.checkSigs` option
 
 ### Usage Examples
 
@@ -49,7 +64,9 @@ Your required api key. Get one at https://tinypng.com/developers
 grunt.initConfig({
   tinypng: {
     options: {
-        apiKey: "YOUR API KEY HERE"
+        apiKey: "YOUR API KEY HERE",
+        checkSigs: true,
+        sigFile: 'dest/file_sigs.json'
     },
     files: {
       'dest/foo.min.png': 'src/foo.png'

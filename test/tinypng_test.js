@@ -1,7 +1,8 @@
 'use strict';
 
 var grunt = require('grunt'),
-    fs = require("fs");
+    fs = require("fs"),
+    crypto = require("crypto");
 
 /*
   ======== A Handy Little Nodeunit Reference ========
@@ -28,26 +29,68 @@ exports.tinypng = {
     // setup here if necessary
     done();
   },
-  default_options: function(test) {
-    test.expect(2);
+  test_single: function(test) {
+    test.expect(6);
 
-    fs.stat('test/fixtures/large.png', function(err, origStats) { 
+    var sigPath = '/tmp/file_sigs.json',
+        origImgPath = 'test/fixtures/large.png',
+        minImgPath = '/tmp/large.min.png',
+        doneStats = false,
+        doneSigs = false;
+
+    fs.stat(origImgPath, function(err, origStats) { 
         if(err) {
+            throw err;
             test.done();
             return;
         }
 
-        fs.stat('/tmp/large.min.png', function(err, minStats) { 
+        fs.stat(minImgPath, function(err, minStats) { 
             if(err) {
+                throw err;
                 test.done();
                 return;
             }
 
             test.ok(minStats.size > 0, "should be greater than 0 bytes");
             test.ok(minStats.size < origStats.size / 2, "minified bytes should be less than half the original");
-            test.done();
+            doneStats = true;
+            if(doneStats && doneSigs) {
+                test.done();
+            }
         });
+    });
 
+    fs.stat(sigPath, function(err, stats) {
+        if(err) {
+            throw err;
+            test.done();
+            return;
+        }
+
+        fs.readFile(sigPath, function(err, data) {
+            if(err) {
+                throw err;
+                test.done();
+                return;
+            }
+
+            var sigs = JSON.parse(data);
+            test.equal(typeof data, 'object');
+            test.ok(minImgPath in sigs);
+            test.equal(sigs[minImgPath].length, 32);
+
+            var md5 = crypto.createHash("md5"),
+                stream = fs.ReadStream(minImgPath);
+            stream.on("data", function(d) { md5.update(d); });
+            stream.on("end", function() {
+                test.equal(md5.digest("hex"), sigs[minImgPath]);
+                doneSigs = true;
+                if(doneStats && doneSigs) {
+                    test.done();
+                }
+            });
+        });
     });
   }
 };

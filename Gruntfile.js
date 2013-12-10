@@ -10,6 +10,8 @@
 
 module.exports = function(grunt) {
 
+  var path = require("path");
+
   // Project configuration.
   grunt.initConfig({
       jshint: {
@@ -30,19 +32,36 @@ module.exports = function(grunt) {
 
       // Configuration to be run (and then tested).
       tinypng: {
-          default_options: {
-              options: {
-                  apiKey: ''
-              },
+          options: {
+              apiKey: '',
+              checkSigs: true,
+              sigFile: '/tmp/file_sigs.json'
+          },
+          test_single: {
               files: {
                   '/tmp/large.min.png': 'test/fixtures/large.png'
+              }
+          },
+          test_dynamic: {
+              expand: true, src: 'test/fixtures/{horse-ranch,pettirosso_2,large}.png', dest: '/tmp/',
+              ext: '.min.png'
+          },
+          test_dynamic2: {
+              src: ['{large,}.png', '!*.min.png'],
+              cwd: 'test/fixtures/',
+              dest: '/tmp/',
+              expand: true,
+              rename: function(dest, src) { 
+                  var parts = src.split('/'),
+                      fname = path.basename(parts.pop(), ".png");
+                  return path.join(dest, fname + '.min.png');
               }
           }
       },
 
       // Unit tests.
       nodeunit: {
-          tests: ['test/*_test.js'],
+          tests: ['test/*_test.js']
       }
 
   });
@@ -57,7 +76,7 @@ module.exports = function(grunt) {
 
   // Whenever the "test" task is run, first clean the "tmp" dir, then run this
   // plugin's task(s), then test the result.
-  grunt.registerTask('test', ['clean', 'tinypng', 'nodeunit']);
+  grunt.registerTask('test', ['clean', 'tinypng:test_single', 'nodeunit']);
 
   // By default, lint and run all tests.
   grunt.registerTask('default', ['jshint', 'test']);
