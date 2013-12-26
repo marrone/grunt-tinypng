@@ -47,17 +47,18 @@ Your required api key. Get one at https://tinypng.com/developers
 Type: `Boolean`
 Default value: `false`
 
-Whether or not to compare existing dest file md5 signatures against those found in the `options.sigFile` json data.
+Whether or not to compare existing source file md5 signatures against those found in the `options.sigFile` json data.
 When the signatures match, the file is skipped from being minified again, allowing you to better stay within your API request limits.
-You can pass --force as a command line option to force the image to be minified whether or not the signatures match.
-When an image is minified, and `options.checkSigs` is true, the md5 signature is determined and written to the file at `options.sigFile`.
+You can pass `--force` as a command line option to force the image to be minified whether or not the signatures match.
+When an image is minified, and `options.checkSigs` is true, the md5 signature is determined from the unminified source image and written to the file at `options.sigFile` (a suggested location would be somewhere under your source control).
+
 Signatures are based off the unminified source image, so that when the source changes it will be re-minified and re-written to the destination file.
 
 #### options.sigFile
 Type: `String`
 Default value: `''`
 
-The file location to write the minified image md5 signatures to when using the `options.checkSigs` option
+The file location to write the source image md5 signatures to when using the `options.checkSigs` option
 
 ### Usage Examples
 
@@ -69,12 +70,33 @@ grunt.initConfig({
         checkSigs: true,
         sigFile: 'dest/file_sigs.json'
     },
-    files: {
-      'dest/foo.min.png': 'src/foo.png'
+    compress: {
+        files: {
+          'dest/foo.min.png': 'src/foo.png'
+        }
     },
-  },
+    compress2: {
+        expand: true, 
+        src: 'src/{foo,bar,baz}.png', 
+        dest: 'dest/',
+        ext: '.min.png'
+    },
+    compress3: {
+        src: ['{foo,bar,baz}.png', '!*.min.png'],
+        cwd: 'src/',
+        dest: 'dest/',
+        expand: true,
+        rename: function(dest, src) { 
+            var parts = src.split('/'),
+            fname = path.basename(parts.pop(), ".png");
+            return path.join(dest, fname + '.min.png');
+        }
+    }
+  }
 });
 ```
+### Debugging
+Pass the `--verbose` command line option to see the API requests that are being made and those images that are skipped due to matching file signatures (`options.checkSigs`)
 
 ## Release History
 _(Nothing yet)_
