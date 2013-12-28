@@ -18,7 +18,8 @@ module.exports = function(grunt) {
         https = require("https"),
         url = require("url"),
         crypto = require("crypto"),
-        humanize = require("humanize");
+        humanize = require("humanize"),
+        multimeter = require("multimeter");
 
     grunt.registerMultiTask('tinypng', 'image optimization via tinypng service', function() {
 
@@ -26,6 +27,7 @@ module.exports = function(grunt) {
         var options = this.options({
             apiKey: '',
             summarize: false,
+            showProgress: false,
             checkSigs: false,
             sigFile: ''
         });
@@ -51,12 +53,48 @@ module.exports = function(grunt) {
                 agent: false,
                 auth: 'api:' + options.apiKey
             },
-            fileSigs = options.checkSigs && grunt.file.exists(options.sigFile) && grunt.file.readJSON(options.sigFile) || {};
+            fileSigs = options.checkSigs && grunt.file.exists(options.sigFile) && grunt.file.readJSON(options.sigFile) || {},
+            multi,
+            maxBarLen = 20,
+            barCount = 0;
+
+        if(options.showProgress) {
+            multi = multimeter(process);
+            multi.charm.reset();
+        }
+
+        function createProgressBar(type, filepath) { 
+            if(!multi) {
+                return;
+            }
+
+            var label = type === "down" ? "↓" : "↑";
+            label = humanize.truncatechars(label + " " + path.basename(filepath), maxBarLen);
+            multi.write(label + ":\n");
+
+            var bar = multi(maxBarLen, barCount + 1, {
+                width: 20,
+                solid: {
+                    text: '|',
+                    foreground: 'white',
+                    background: 'blue'
+                },
+                empty: {text: ' '}
+            });
+            barCount++;
+
+            return bar;
+        }
 
         function checkDone() {
             if(fileCount <= 0) {
                 if(options.checkSigs) {
                     grunt.file.write(options.sigFile, JSON.stringify(fileSigs));
+                }
+                if(multi) {
+                    multi.charm.reset();
+                    multi.write("\n");
+                    multi.destroy();
                 }
                 if(options.summarize) {
                     var summary = "Skipped: " + skipCount + " image" + (skipCount !== 1 ? "s" : "") + ", " +
@@ -78,14 +116,21 @@ module.exports = function(grunt) {
             urlInfo.rejectUnauthorized = false;
             urlInfo.requestCert = true;
 
+            var bar = options.showProgress ? createProgressBar("down", srcpath) : null, 
+                fileSize = 0,
+                readSize = 0;
+
             compressCount++;
-            if(options.summarize) {
+            if(options.summarize || options.showProgress) {
                 var resStats = "";
                 res.on("data", function(chunk) { resStats += chunk; });
                 res.on("end", function() { 
                     var statsObj = JSON.parse(resStats);
                     inputBytes += statsObj.input.size;
                     outputBytes += statsObj.output.size;
+                    if(options.showProgress) {
+                        fileSize = statsObj.output.size;
+                    }
                 });
             }
 
@@ -96,8 +141,16 @@ module.exports = function(grunt) {
                     grunt.log.error("got bad status code " + imageRes.statusCode);
                 }
 
+                if(options.showProgress) { 
+                    imageRes.on('data', function(chunk){
+                        readSize += chunk.length;
+                        var perc = Math.round(readSize / fileSize * 100);
+                        bar.percent(perc);
+                    });
+                }
+
                 imageRes.on("end", function() { 
-                    grunt.log.writeln("wrote minified image to " + dest);
+                    grunt.verbose.writeln("wrote minified image to " + dest);
                     fileCount--;
                     if(options.checkSigs) {
                         getFileHash(srcpath, function(fp, hash) {
@@ -173,6 +226,17 @@ module.exports = function(grunt) {
                 req.end();
             });
             stream.pipe(req);
+
+            if(options.showProgress) { 
+                var bar = createProgressBar("up", filepath);
+                var fileSize = fs.statSync(filepath).size;
+                var readSize = 0;
+                stream.on('data', function(chunk){
+                    readSize += chunk.length;
+                    var perc = Math.round(readSize / fileSize * 100);
+                    bar.percent(perc);
+                });
+            }
         }
 
         // Iterate over all specified file groups.
@@ -205,6 +269,7 @@ module.exports = function(grunt) {
                 fileCount++;
             }); 
         });
+
     });
 
 };
