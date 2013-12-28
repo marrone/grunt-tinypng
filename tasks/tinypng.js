@@ -104,9 +104,6 @@ module.exports = function(grunt) {
         }
 
         function handleAPIResponse(res, dest, srcpath) {
-            grunt.verbose.writeln("API RESPONSE STATUS: " + res.statusCode);
-            grunt.verbose.writeln("HEADERS: " + JSON.stringify(res.headers));
-
             if(res.statusCode === 201 && !!res.headers.location) {
                 handleAPIResponseSuccess(res, dest, srcpath);
             }
@@ -170,8 +167,9 @@ module.exports = function(grunt) {
                             processImage(filepath, f.dest);
                         }
                         else {
-                            fileCount--;
                             grunt.verbose.writeln("file sig matches, skipping minification of file at " + filepath);
+                            fileCount--;
+                            checkDone();
                         }
                     });
                 }
