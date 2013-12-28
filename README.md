@@ -60,6 +60,13 @@ Default value: `''`
 
 The file location to write the source image md5 signatures to when using the `options.checkSigs` option
 
+#### options.summarize
+Type: `Boolean`
+Default value: `false`
+
+If True, will print a stats summary of number of images skipped, number compressed and the bytes saved, e.g.)
+`Skipped: 1 image, Compressed: 1 image, Savings: 153.86 KB (ratio: 0.1999)`
+
 ### Usage Examples
 
 ```js
@@ -68,7 +75,8 @@ grunt.initConfig({
     options: {
         apiKey: "YOUR API KEY HERE",
         checkSigs: true,
-        sigFile: 'dest/file_sigs.json'
+        sigFile: 'dest/file_sigs.json',
+        summarize: true
     },
     compress: {
         files: {

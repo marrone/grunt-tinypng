@@ -17,13 +17,15 @@ module.exports = function(grunt) {
         path = require("path"),
         https = require("https"),
         url = require("url"),
-        crypto = require("crypto");
+        crypto = require("crypto"),
+        humanize = require("humanize");
 
     grunt.registerMultiTask('tinypng', 'image optimization via tinypng service', function() {
 
         // Merge task-specific and/or target-specific options with these defaults.
         var options = this.options({
             apiKey: '',
+            summarize: false,
             checkSigs: false,
             sigFile: ''
         });
@@ -34,6 +36,10 @@ module.exports = function(grunt) {
 
         var done = this.async(),
             fileCount = 0,
+            skipCount = 0,
+            compressCount = 0,
+            inputBytes = 0,
+            outputBytes = 0,
             reqOpts = {
                 host: 'api.tinypng.com',
                 port: 443,
@@ -52,6 +58,13 @@ module.exports = function(grunt) {
                 if(options.checkSigs) {
                     grunt.file.write(options.sigFile, JSON.stringify(fileSigs));
                 }
+                if(options.summarize) {
+                    var summary = "Skipped: " + skipCount + " image" + (skipCount !== 1 ? "s" : "") + ", " +
+                                  "Compressed: " + compressCount + " image" + (compressCount !== 1 ? "s" : "") + ", " +
+                                  "Savings: " + humanize.filesize(inputBytes - outputBytes) + 
+                                  " (ratio: " + (inputBytes ? Math.round(outputBytes / inputBytes * 10000) / 10000 : 0) + ')';
+                    grunt.log.writeln(summary);
+                }
                 done();
             }
         }
@@ -64,6 +77,17 @@ module.exports = function(grunt) {
             urlInfo.accepts = '*/*';
             urlInfo.rejectUnauthorized = false;
             urlInfo.requestCert = true;
+
+            compressCount++;
+            if(options.summarize) {
+                var resStats = "";
+                res.on("data", function(chunk) { resStats += chunk; });
+                res.on("end", function() { 
+                    var statsObj = JSON.parse(resStats);
+                    inputBytes += statsObj.input.size;
+                    outputBytes += statsObj.output.size;
+                });
+            }
 
             https.get(urlInfo, function(imageRes) {
                 grunt.verbose.writeln("minified image request response status code is " + imageRes.statusCode);
@@ -169,6 +193,7 @@ module.exports = function(grunt) {
                         else {
                             grunt.verbose.writeln("file sig matches, skipping minification of file at " + filepath);
                             fileCount--;
+                            skipCount++;
                             checkDone();
                         }
                     });
