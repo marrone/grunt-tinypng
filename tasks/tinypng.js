@@ -1,3 +1,5 @@
+/*global require:true, process:true */
+
 /*
  * grunt-tinypng
  * https://github.com/marrone/grunt-tinypng
@@ -55,35 +57,59 @@ module.exports = function(grunt) {
             },
             fileSigs = options.checkSigs && grunt.file.exists(options.sigFile) && grunt.file.readJSON(options.sigFile) || {},
             multi,
-            maxBarLen = 20,
-            barCount = 0;
+            maxBarLen = 13,
+            upCount = 0,
+            upCountComplete = 0,
+            upBytes = 0,
+            upBar,
+            downCount = 0,
+            downCountComplete = 0,
+            downBytes = 0,
+            downBar;
 
-        if(options.showProgress) {
-            multi = multimeter(process);
-            multi.charm.reset();
+        function pluralize(text, num) {
+            return text + (num === 1 ? "" : "s");
         }
 
-        function createProgressBar(type, filepath) { 
+        function formatPerc(prog, total) {
+            return total ? Math.round(prog / total * 100) : 0;
+        }
+
+        function formatProgressMessage(perc, countComplete, countTotal) {
+            var percStr = perc;
+            if(perc < 10) { percStr = "  " + percStr; }
+            else if(perc < 100) { percStr = " " + percStr; }
+            return percStr + "% (" + countComplete + "/" + countTotal + pluralize(" image", countTotal) + ")";
+        }
+
+        function createProgressBars(callback) { 
             if(!multi) {
                 return;
             }
 
-            var label = type === "down" ? "↓" : "↑";
-            label = humanize.truncatechars(label + " " + path.basename(filepath), maxBarLen);
-            multi.write(label + ":\n");
+            var colors = ["red","blue"];
+            function createBar(barCount, callback) { 
+                callback(multi.rel(maxBarLen, (barCount + 1), {
+                    width: 20,
+                    solid: {
+                        text: '|',
+                        foreground: 'white',
+                        background: colors[barCount]
+                    },
+                    empty: {text: ' '}
+                }));
+            }
 
-            var bar = multi(maxBarLen, barCount + 1, {
-                width: 20,
-                solid: {
-                    text: '|',
-                    foreground: 'white',
-                    background: 'blue'
-                },
-                empty: {text: ' '}
+            multi.write("↑ Upload:");
+            createBar(0, function(bar) { 
+                downBar = bar; 
+                multi.write("\n↓ Download:");
+                createBar(1, function(bar) {
+                    upBar = bar;
+                    multi.write("\n");
+                    callback();
+                });
             });
-            barCount++;
-
-            return bar;
         }
 
         function checkDone() {
@@ -92,13 +118,12 @@ module.exports = function(grunt) {
                     grunt.file.write(options.sigFile, JSON.stringify(fileSigs));
                 }
                 if(multi) {
-                    multi.charm.reset();
                     multi.write("\n");
                     multi.destroy();
                 }
                 if(options.summarize) {
-                    var summary = "Skipped: " + skipCount + " image" + (skipCount !== 1 ? "s" : "") + ", " +
-                                  "Compressed: " + compressCount + " image" + (compressCount !== 1 ? "s" : "") + ", " +
+                    var summary = "Skipped: " + skipCount + pluralize(" image", skipCount) + ", " +
+                                  "Compressed: " + compressCount + pluralize(" image", compressCount) + ", " +
                                   "Savings: " + humanize.filesize(inputBytes - outputBytes) + 
                                   " (ratio: " + (inputBytes ? Math.round(outputBytes / inputBytes * 10000) / 10000 : 0) + ')';
                     grunt.log.writeln(summary);
@@ -116,21 +141,14 @@ module.exports = function(grunt) {
             urlInfo.rejectUnauthorized = false;
             urlInfo.requestCert = true;
 
-            var bar = options.showProgress ? createProgressBar("down", srcpath) : null, 
-                fileSize = 0,
-                readSize = 0;
-
             compressCount++;
             if(options.summarize || options.showProgress) {
+                downCount++;
                 var resStats = "";
                 res.on("data", function(chunk) { resStats += chunk; });
                 res.on("end", function() { 
                     var statsObj = JSON.parse(resStats);
-                    inputBytes += statsObj.input.size;
                     outputBytes += statsObj.output.size;
-                    if(options.showProgress) {
-                        fileSize = statsObj.output.size;
-                    }
                 });
             }
 
@@ -143,15 +161,19 @@ module.exports = function(grunt) {
 
                 if(options.showProgress) { 
                     imageRes.on('data', function(chunk){
-                        readSize += chunk.length;
-                        var perc = Math.round(readSize / fileSize * 100);
-                        bar.percent(perc);
+                        downBytes += chunk.length;
+                        var perc = formatPerc(downBytes, outputBytes);
+                        var msg = formatProgressMessage(perc, downCountComplete, downCount);
+                        downBar.percent(perc, msg);
                     });
                 }
 
                 imageRes.on("end", function() { 
                     grunt.verbose.writeln("wrote minified image to " + dest);
                     fileCount--;
+                    downCountComplete++;
+                    var perc = formatPerc(downBytes, outputBytes);
+                    downBar.percent(perc, formatProgressMessage(perc, downCountComplete, downCount));
                     if(options.checkSigs) {
                         getFileHash(srcpath, function(fp, hash) {
                             fileSigs[srcpath] = hash;
@@ -223,52 +245,69 @@ module.exports = function(grunt) {
             // stream the image data as the request POST body
             var stream = fs.createReadStream(filepath);
             stream.on("end", function() {
+                upCountComplete++;
+                var perc = formatPerc(upBytes, inputBytes);
+                upBar.percent(perc, formatProgressMessage(perc, upCountComplete, upCount));
                 req.end();
             });
             stream.pipe(req);
 
-            if(options.showProgress) { 
-                var bar = createProgressBar("up", filepath);
-                var fileSize = fs.statSync(filepath).size;
-                var readSize = 0;
-                stream.on('data', function(chunk){
-                    readSize += chunk.length;
-                    var perc = Math.round(readSize / fileSize * 100);
-                    bar.percent(perc);
-                });
+            if(options.summarize || options.showProgress) { 
+                inputBytes += fs.statSync(filepath).size;
+                if(options.showProgress) { 
+                    upCount++;
+                    stream.on('data', function(chunk){
+                        upBytes += chunk.length;
+                        var perc = formatPerc(upBytes, inputBytes);
+                        var msg = formatProgressMessage(perc, upCountComplete, upCount);
+                        upBar.percent(perc, msg);
+                    });
+                }
             }
         }
 
-        // Iterate over all specified file groups.
-        this.files.forEach(function(f) {
-            f.src.forEach(function(filepath) {
-                // Warn on and remove invalid source files (if nonull was set).
-                if(!grunt.file.exists(filepath)) {
-                    grunt.log.warn('Source file "' + filepath + '" not found.');
-                    return;
-                }
+        // START
+        var that = this;
+        function init() { 
+            // Iterate over all specified file groups.
+            that.files.forEach(function(f) {
+                f.src.forEach(function(filepath) {
+                    // Warn on and remove invalid source files (if nonull was set).
+                    if(!grunt.file.exists(filepath)) {
+                        grunt.log.warn('Source file "' + filepath + '" not found.');
+                        return;
+                    }
 
-                if(!grunt.option("force") && options.checkSigs && grunt.file.exists(f.dest)) {
-                    grunt.verbose.writeln("comparing hash of image at " + filepath);
-                    compareFileHash(filepath, fileSigs[filepath], function(fp, matches) {
-                        if(!matches) { 
-                            processImage(filepath, f.dest);
-                        }
-                        else {
-                            grunt.verbose.writeln("file sig matches, skipping minification of file at " + filepath);
-                            fileCount--;
-                            skipCount++;
-                            checkDone();
-                        }
-                    });
-                }
-                else {
-                    processImage(filepath, f.dest);
-                }
+                    if(!grunt.option("force") && options.checkSigs && grunt.file.exists(f.dest)) {
+                        grunt.verbose.writeln("comparing hash of image at " + filepath);
+                        compareFileHash(filepath, fileSigs[filepath], function(fp, matches) {
+                            if(!matches) { 
+                                processImage(filepath, f.dest);
+                            }
+                            else {
+                                grunt.verbose.writeln("file sig matches, skipping minification of file at " + filepath);
+                                fileCount--;
+                                skipCount++;
+                                checkDone();
+                            }
+                        });
+                    }
+                    else {
+                        processImage(filepath, f.dest);
+                    }
 
-                fileCount++;
-            }); 
-        });
+                    fileCount++;
+                }); 
+            });
+        }
+
+        if(options.showProgress) {
+            multi = multimeter(process);
+            createProgressBars(init);
+        }
+        else { 
+            init();
+        }
 
     });
 

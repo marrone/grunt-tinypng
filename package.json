@@ -46,7 +46,8 @@
     "grunt-contrib-clean": "~0.4.1",
     "grunt-contrib-jshint": "~0.6.5",
     "grunt-contrib-nodeunit": "~0.2.2",
-    "humanize": "~0.0.9"
+    "humanize": "~0.0.9",
+    "multimeter": "~0.1.1"
   },
   "license": "MIT"
 }
