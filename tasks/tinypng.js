@@ -58,37 +58,64 @@ module.exports = function(grunt) {
             fileSigs = options.checkSigs && grunt.file.exists(options.sigFile) && grunt.file.readJSON(options.sigFile) || {},
             multi,
             maxBarLen = 13,
-            upCount = 0,
-            upCountComplete = 0,
-            upBytes = 0,
-            upBar,
-            downCount = 0,
-            downCountPending = 0,
-            downCountComplete = 0,
-            downBytes = 0,
-            downBar;
+            upProgress,
+            downProgress;
 
         function pluralize(text, num) {
             return text + (num === 1 ? "" : "s");
         }
 
-        function formatPerc(prog, total) {
-            return total ? Math.round(prog / total * 100) : 0;
+        function Progress(bar) {
+            this.bar = bar;
+            this.totalImages = 0;
+            this.completeImages = 0;
+            this.pendingImages = 0;
+            this.totalBytes = 0;
+            this.progressBytes = 0;
         }
+        Progress.prototype = {
+            addImage: function(fileSize) {
+                this.totalImages++;
+                this.addBytes(fileSize);
+            },
+            addBytes: function(bytes) {
+                this.totalBytes += bytes || 0;
+            },
+            addProgress: function(fileSize) {
+                this.progressBytes += fileSize;
+            },
+            addComplete: function() {
+                this.completeImages++;
+            },
+            addPending: function() {
+                this.pendingImages++;
+            },
+            removePending: function() {
+                this.pendingImages--;
+            },
+            formatPerc: function(prog, total) {
+                return this.totalBytes ? Math.round(this.progressBytes / this.totalBytes * 100) : 0;
+            },
+            toString: function() {
+                var perc = this.formatPerc(),
+                    percStr = perc;
+                if(perc < 10) { percStr = "  " + percStr; }
+                else if(perc < 100) { percStr = " " + percStr; }
 
-        function formatProgressMessage(perc, countComplete, countTotal, countPending) {
-            var percStr = perc;
-            if(perc < 10) { percStr = "  " + percStr; }
-            else if(perc < 100) { percStr = " " + percStr; }
-
-            var countPendingStr = " waiting on API";
-            var blankPendingStr = "                    "; // hacky way to clear the multimeter trailing text
-            var out = percStr + "% (" +
-                      countComplete + "/" + countTotal + 
-                      pluralize(" image", countTotal) +
-                      (countPending ? ", " + countPending + countPendingStr + ")" : ") " + blankPendingStr);
-            return out;
-        }
+                var countPendingStr = " waiting on API";
+                var blankPendingStr = "                    "; // hacky way to clear the multimeter trailing text
+                var out = percStr + "% (" +
+                          this.completeImages + "/" + this.totalImages + 
+                          pluralize(" image", this.totalImages) +
+                          (this.pendingImages ? ", " + this.pendingImages + countPendingStr + ")" : ") " + blankPendingStr);
+                return out;
+            },
+            render: function() {
+                var perc = this.formatPerc();
+                var msg = this.toString();
+                this.bar.percent(perc, msg);
+            }
+        };
 
         function createProgressBars(callback) { 
             if(!multi) {
@@ -110,10 +137,10 @@ module.exports = function(grunt) {
 
             multi.write("↑ Upload:");
             createBar(0, function(bar) { 
-                downBar = bar; 
+                downProgress = new Progress(bar);
                 multi.write("\n↓ Download:");
                 createBar(1, function(bar) {
-                    upBar = bar;
+                    upProgress = new Progress(bar);
                     multi.write("\n");
                     callback();
                 });
@@ -151,12 +178,12 @@ module.exports = function(grunt) {
 
             compressCount++;
             if(options.summarize || options.showProgress) {
-                downCount++;
                 var resStats = "";
                 res.on("data", function(chunk) { resStats += chunk; });
                 res.on("end", function() { 
                     var statsObj = JSON.parse(resStats);
                     outputBytes += statsObj.output.size;
+                    downProgress.addImage(statsObj.output.size);
                 });
             }
 
@@ -169,19 +196,16 @@ module.exports = function(grunt) {
 
                 if(options.showProgress) { 
                     imageRes.on('data', function(chunk){
-                        downBytes += chunk.length;
-                        var perc = formatPerc(downBytes, outputBytes);
-                        var msg = formatProgressMessage(perc, downCountComplete, downCount, downCountPending);
-                        downBar.percent(perc, msg);
+                        downProgress.addProgress(chunk.length);
+                        downProgress.render();
                     });
                 }
 
                 imageRes.on("end", function() { 
                     grunt.verbose.writeln("wrote minified image to " + dest);
                     fileCount--;
-                    downCountComplete++;
-                    var perc = formatPerc(downBytes, outputBytes);
-                    downBar.percent(perc, formatProgressMessage(perc, downCountComplete, downCount, downCountPending));
+                    downProgress.addComplete();
+                    downProgress.render();
                     if(options.checkSigs) {
                         getFileHash(srcpath, function(fp, hash) {
                             fileSigs[srcpath] = hash;
@@ -243,7 +267,7 @@ module.exports = function(grunt) {
             grunt.verbose.writeln("Processing image at " + filepath);
 
             var req = https.request(reqOpts, function(res) { 
-                downCountPending--;
+                downProgress.removePending();
                 handleAPIResponse(res, dest, filepath); 
             });
 
@@ -254,23 +278,21 @@ module.exports = function(grunt) {
             // stream the image data as the request POST body
             var stream = fs.createReadStream(filepath);
             stream.on("end", function() {
-                upCountComplete++;
-                downCountPending++;
-                var perc = formatPerc(upBytes, inputBytes);
-                upBar.percent(perc, formatProgressMessage(perc, upCountComplete, upCount));
+                downProgress.addPending();
+                upProgress.addComplete();
+                upProgress.render();
                 req.end();
             });
             stream.pipe(req);
 
             if(options.summarize || options.showProgress) { 
-                inputBytes += fs.statSync(filepath).size;
+                var fileSize = fs.statSync(filepath).size;
+                inputBytes += fileSize;
                 if(options.showProgress) { 
-                    upCount++;
+                    upProgress.addImage(fileSize);
                     stream.on('data', function(chunk){
-                        upBytes += chunk.length;
-                        var perc = formatPerc(upBytes, inputBytes);
-                        var msg = formatProgressMessage(perc, upCountComplete, upCount);
-                        upBar.percent(perc, msg);
+                        upProgress.addProgress(chunk.length);
+                        upProgress.render();
                     });
                 }
             }
