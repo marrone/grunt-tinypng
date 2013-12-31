@@ -63,6 +63,7 @@ module.exports = function(grunt) {
             upBytes = 0,
             upBar,
             downCount = 0,
+            downCountPending = 0,
             downCountComplete = 0,
             downBytes = 0,
             downBar;
@@ -75,11 +76,18 @@ module.exports = function(grunt) {
             return total ? Math.round(prog / total * 100) : 0;
         }
 
-        function formatProgressMessage(perc, countComplete, countTotal) {
+        function formatProgressMessage(perc, countComplete, countTotal, countPending) {
             var percStr = perc;
             if(perc < 10) { percStr = "  " + percStr; }
             else if(perc < 100) { percStr = " " + percStr; }
-            return percStr + "% (" + countComplete + "/" + countTotal + pluralize(" image", countTotal) + ")";
+
+            var countPendingStr = " waiting on API";
+            var blankPendingStr = "                    "; // hacky way to clear the multimeter trailing text
+            var out = percStr + "% (" +
+                      countComplete + "/" + countTotal + 
+                      pluralize(" image", countTotal) +
+                      (countPending ? ", " + countPending + countPendingStr + ")" : ") " + blankPendingStr);
+            return out;
         }
 
         function createProgressBars(callback) { 
@@ -163,7 +171,7 @@ module.exports = function(grunt) {
                     imageRes.on('data', function(chunk){
                         downBytes += chunk.length;
                         var perc = formatPerc(downBytes, outputBytes);
-                        var msg = formatProgressMessage(perc, downCountComplete, downCount);
+                        var msg = formatProgressMessage(perc, downCountComplete, downCount, downCountPending);
                         downBar.percent(perc, msg);
                     });
                 }
@@ -173,7 +181,7 @@ module.exports = function(grunt) {
                     fileCount--;
                     downCountComplete++;
                     var perc = formatPerc(downBytes, outputBytes);
-                    downBar.percent(perc, formatProgressMessage(perc, downCountComplete, downCount));
+                    downBar.percent(perc, formatProgressMessage(perc, downCountComplete, downCount, downCountPending));
                     if(options.checkSigs) {
                         getFileHash(srcpath, function(fp, hash) {
                             fileSigs[srcpath] = hash;
@@ -235,6 +243,7 @@ module.exports = function(grunt) {
             grunt.verbose.writeln("Processing image at " + filepath);
 
             var req = https.request(reqOpts, function(res) { 
+                downCountPending--;
                 handleAPIResponse(res, dest, filepath); 
             });
 
@@ -246,6 +255,7 @@ module.exports = function(grunt) {
             var stream = fs.createReadStream(filepath);
             stream.on("end", function() {
                 upCountComplete++;
+                downCountPending++;
                 var perc = formatPerc(upBytes, inputBytes);
                 upBar.percent(perc, formatProgressMessage(perc, upCountComplete, upCount));
                 req.end();
