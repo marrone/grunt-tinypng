@@ -67,6 +67,13 @@ Default value: `false`
 If True, will print a stats summary of number of images skipped, number compressed and the bytes saved, e.g.)
 `Skipped: 1 image, Compressed: 1 image, Savings: 153.86 KB (ratio: 0.1999)`
 
+#### options.showProgress
+Type: `Boolean`
+Default value: `false`
+
+If True, will print upload/download progress bars while images are being processed through the tinypng API. 
+Progress bars use the [multimeter](https://github.com/substack/node-multimeter) module
+
 ### Usage Examples
 
 ```js
@@ -76,7 +83,8 @@ grunt.initConfig({
         apiKey: "YOUR API KEY HERE",
         checkSigs: true,
         sigFile: 'dest/file_sigs.json',
-        summarize: true
+        summarize: true,
+        showProgress: true
     },
     compress: {
         files: {
