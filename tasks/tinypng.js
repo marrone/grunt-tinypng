@@ -77,21 +77,27 @@ module.exports = function(grunt) {
             addImage: function(fileSize) {
                 this.totalImages++;
                 this.addBytes(fileSize);
+                return this;
             },
             addBytes: function(bytes) {
                 this.totalBytes += bytes || 0;
+                return this;
             },
             addProgress: function(fileSize) {
                 this.progressBytes += fileSize;
+                return this;
             },
             addComplete: function() {
                 this.completeImages++;
+                return this;
             },
             addPending: function() {
                 this.pendingImages++;
+                return this;
             },
             removePending: function() {
                 this.pendingImages--;
+                return this;
             },
             formatPerc: function(prog, total) {
                 return this.totalBytes ? Math.round(this.progressBytes / this.totalBytes * 100) : 0;
@@ -114,6 +120,7 @@ module.exports = function(grunt) {
                 var perc = this.formatPerc();
                 var msg = this.toString();
                 this.bar.percent(perc, msg);
+                return this;
             }
         };
 
@@ -183,7 +190,9 @@ module.exports = function(grunt) {
                 res.on("end", function() { 
                     var statsObj = JSON.parse(resStats);
                     outputBytes += statsObj.output.size;
-                    downProgress.addImage(statsObj.output.size);
+                    if(options.showProgress) { 
+                        downProgress.addImage(statsObj.output.size).render();
+                    }
                 });
             }
 
@@ -196,16 +205,16 @@ module.exports = function(grunt) {
 
                 if(options.showProgress) { 
                     imageRes.on('data', function(chunk){
-                        downProgress.addProgress(chunk.length);
-                        downProgress.render();
+                        downProgress.addProgress(chunk.length).render();
                     });
                 }
 
                 imageRes.on("end", function() { 
                     grunt.verbose.writeln("wrote minified image to " + dest);
                     fileCount--;
-                    downProgress.addComplete();
-                    downProgress.render();
+                    if(options.showProgress) { 
+                        downProgress.addComplete().render();
+                    }
                     if(options.checkSigs) {
                         getFileHash(srcpath, function(fp, hash) {
                             fileSigs[srcpath] = hash;
@@ -267,7 +276,9 @@ module.exports = function(grunt) {
             grunt.verbose.writeln("Processing image at " + filepath);
 
             var req = https.request(reqOpts, function(res) { 
-                downProgress.removePending();
+                if(options.showProgress) { 
+                    downProgress.removePending().render();
+                }
                 handleAPIResponse(res, dest, filepath); 
             });
 
@@ -276,23 +287,23 @@ module.exports = function(grunt) {
             });
 
             // stream the image data as the request POST body
-            var stream = fs.createReadStream(filepath);
-            stream.on("end", function() {
-                downProgress.addPending();
-                upProgress.addComplete();
-                upProgress.render();
+            var readStream = fs.createReadStream(filepath);
+            readStream.on("end", function() {
+                if(options.showProgress) { 
+                    downProgress.addPending().render();
+                    upProgress.addComplete().render();
+                }
                 req.end();
             });
-            stream.pipe(req);
+            readStream.pipe(req);
 
             if(options.summarize || options.showProgress) { 
                 var fileSize = fs.statSync(filepath).size;
                 inputBytes += fileSize;
                 if(options.showProgress) { 
-                    upProgress.addImage(fileSize);
-                    stream.on('data', function(chunk){
-                        upProgress.addProgress(chunk.length);
-                        upProgress.render();
+                    upProgress.addImage(fileSize).render();
+                    readStream.on('data', function(chunk){
+                        upProgress.addProgress(chunk.length).render();
                     });
                 }
             }
