@@ -30,6 +30,7 @@ module.exports = function(grunt) {
             apiKey: '',
             summarize: false,
             showProgress: false,
+            stopOnImageError: true,
             checkSigs: false,
             sigFile: ''
         });
@@ -183,6 +184,16 @@ module.exports = function(grunt) {
             }
         }
 
+        function handleImageError(msg) {
+            if(options.stopOnImageError) {
+                grunt.log.error(msg);
+                done(false);
+            }
+            else {
+                grunt.log.warn(msg);
+            }
+        }
+
         function handleAPIResponseSuccess(res, dest, srcpath) {
             var imageLocation = res.headers.location;
             grunt.verbose.writeln("making request to get image at " + imageLocation);
@@ -209,7 +220,7 @@ module.exports = function(grunt) {
                 grunt.verbose.writeln("minified image request response status code is " + imageRes.statusCode);
 
                 if(imageRes.statusCode >= 300) {
-                    grunt.log.error("got bad status code " + imageRes.statusCode);
+                    handleImageError("got bad status code " + imageRes.statusCode);
                 }
 
                 if(options.showProgress) { 
@@ -238,7 +249,9 @@ module.exports = function(grunt) {
                 imageRes.pipe(fs.createWriteStream(dest));
 
             }).on("error", function(e) {
-                grunt.log.error("got error, " + e.message + ", making request for minified image at " + imageLocation);
+                handleImageError("got error, " + e.message + ", making request for minified image at " + imageLocation);
+                fileCount--;
+                checkDone();
             });
         }
 
@@ -248,7 +261,9 @@ module.exports = function(grunt) {
                 message += chunk;
             });
             res.on("end", function() { 
-                grunt.log.error("got error response from api: " + message);
+                handleImageError("got error response from api: " + message);
+                fileCount--;
+                checkDone();
             });
         }
 
@@ -292,7 +307,7 @@ module.exports = function(grunt) {
             });
 
             req.on("error", function(e) {
-                grunt.log.error("problem with request: " + e.message);
+                handleImageError("problem with request: " + e.message);
             });
 
             // stream the image data as the request POST body
