@@ -74,6 +74,14 @@ Default value: `false`
 If True, will print upload/download progress bars while images are being processed through the tinypng API. 
 Progress bars use the [multimeter](https://github.com/substack/node-multimeter) module
 
+#### options.stopOnImageError
+Type: `Boolean`
+Default value: `true`
+
+If True, will failures to process an image will result in a grunt error and abort further task execution (unless --force is specified).
+If False, failures to process images will simply be logged as warnings.
+
+####
 ### Usage Examples
 
 ```js
@@ -84,7 +92,8 @@ grunt.initConfig({
         checkSigs: true,
         sigFile: 'dest/file_sigs.json',
         summarize: true,
-        showProgress: true
+        showProgress: true,
+        stopOnImageError: true
     },
     compress: {
         files: {
