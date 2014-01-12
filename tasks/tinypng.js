@@ -154,10 +154,19 @@ module.exports = function(grunt) {
             });
         }
 
+        function writeFileSigs() {
+            grunt.file.write(options.sigFile, JSON.stringify(fileSigs));
+        }
+
+        function updateFileSigs(srcpath, hash) {
+            fileSigs[srcpath] = hash;
+            writeFileSigs();
+        }
+
         function checkDone() {
             if(fileCount <= 0) {
                 if(options.checkSigs) {
-                    grunt.file.write(options.sigFile, JSON.stringify(fileSigs));
+                    writeFileSigs();
                 }
                 if(multi) {
                     multi.write("\n");
@@ -217,7 +226,7 @@ module.exports = function(grunt) {
                     }
                     if(options.checkSigs) {
                         getFileHash(srcpath, function(fp, hash) {
-                            fileSigs[srcpath] = hash;
+                            updateFileSigs(srcpath, hash);
                             checkDone();
                         });
                     }
