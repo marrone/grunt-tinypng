@@ -194,27 +194,24 @@ module.exports = function(grunt) {
             }
         }
 
-        function handleAPIResponseSuccess(res, dest, srcpath) {
-            var imageLocation = res.headers.location;
-            grunt.verbose.writeln("making request to get image at " + imageLocation);
+        function handleImageCompressComplete(srcpath, dest) {
+            fileCount--;
+            if(options.checkSigs) {
+                getFileHash(srcpath, function(fp, hash) {
+                    updateFileSigs(srcpath, hash);
+                    checkDone();
+                });
+            }
+            else {
+                checkDone();
+            }
+        }
 
+        function downloadOutputImage(imageLocation, dest, srcpath) {
             var urlInfo = url.parse(imageLocation);
             urlInfo.accepts = '*/*';
             urlInfo.rejectUnauthorized = false;
             urlInfo.requestCert = true;
-
-            compressCount++;
-            if(options.summarize || options.showProgress) {
-                var resStats = "";
-                res.on("data", function(chunk) { resStats += chunk; });
-                res.on("end", function() { 
-                    var statsObj = JSON.parse(resStats);
-                    outputBytes += statsObj.output.size;
-                    if(options.showProgress) { 
-                        downProgress.addImage(statsObj.output.size).render();
-                    }
-                });
-            }
 
             https.get(urlInfo, function(imageRes) {
                 grunt.verbose.writeln("minified image request response status code is " + imageRes.statusCode);
@@ -231,18 +228,9 @@ module.exports = function(grunt) {
 
                 imageRes.on("end", function() { 
                     grunt.verbose.writeln("wrote minified image to " + dest);
-                    fileCount--;
+                    handleImageCompressComplete(srcpath);
                     if(options.showProgress) { 
                         downProgress.addComplete().render();
-                    }
-                    if(options.checkSigs) {
-                        getFileHash(srcpath, function(fp, hash) {
-                            updateFileSigs(srcpath, hash);
-                            checkDone();
-                        });
-                    }
-                    else {
-                        checkDone();
                     }
                 });
                 grunt.file.mkdir(path.dirname(dest));
@@ -253,6 +241,37 @@ module.exports = function(grunt) {
                 fileCount--;
                 checkDone();
             });
+        }
+
+        function handleAPIResponseSuccess(res, dest, srcpath) {
+            var imageLocation = res.headers.location;
+            grunt.verbose.writeln("making request to get image at " + imageLocation);
+
+            compressCount++;
+            var resStats = "";
+            res.on("data", function(chunk) { resStats += chunk; });
+            res.on("end", function() { 
+                var statsObj = JSON.parse(resStats);
+
+                if(options.summarize) { 
+                    outputBytes += statsObj.output.size;
+                }
+
+                // only download the output image if it resulted in a smaller file size
+                // (sometimes tinypng's service results in larger files)
+                if(statsObj.output.size < statsObj.input.size) {
+                    if(options.showProgress) { 
+                        downProgress.addImage(statsObj.output.size).render();
+                    }
+                    downloadOutputImage(imageLocation, dest, srcpath);
+                }
+                else {
+                    grunt.verbose.writeln("output image is larger than source image, copying src " + srcpath + " to dest " + dest);
+                    grunt.file.copy(srcpath, dest);
+                    handleImageCompressComplete(srcpath);
+                }
+            });
+
         }
 
         function handleAPIResponseError(res) {
