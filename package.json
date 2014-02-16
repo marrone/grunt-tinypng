@@ -1,7 +1,7 @@
 {
   "name": "grunt-tinypng",
   "description": "image optimization via tinypng service",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "homepage": "https://github.com/marrone/grunt-tinypng",
   "author": "Mike M <mmarrone@pch.com>",
   "repository": {
@@ -30,7 +30,8 @@
     "grunt-contrib-nodeunit": "~0.2.0",
     "grunt": "~0.4.1",
     "humanize": "~0.0.9",
-    "multimeter": "~0.1.1"
+    "multimeter": "~0.1.1",
+    "promise": "~4.0.0"
   },
   "peerDependencies": {
     "grunt": "~0.4.1"
@@ -47,7 +48,8 @@
     "grunt-contrib-jshint": "~0.6.5",
     "grunt-contrib-nodeunit": "~0.2.2",
     "humanize": "~0.0.9",
-    "multimeter": "~0.1.1"
+    "multimeter": "~0.1.1",
+    "promise": "~4.0.0"
   },
   "license": "MIT"
 }
