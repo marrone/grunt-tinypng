@@ -15,7 +15,7 @@ module.exports = function(grunt) {
     // Please see the Grunt documentation for more information regarding task
     // creation: http://gruntjs.com/creating-tasks
 
-    var fs = require("fs"),
+    var fs = require("graceful-fs"),
         path = require("path"),
         https = require("https"),
         url = require("url"),
@@ -116,7 +116,7 @@ module.exports = function(grunt) {
                 var countPendingStr = " pending";
                 var blankPendingStr = "                    "; // hacky way to clear the multimeter trailing text
                 var out = percStr + "% (" +
-                          this.completeImages + "/" + this.totalImages + 
+                          this.completeImages + "/" + this.totalImages +
                           pluralize(" image", this.totalImages) +
                           (this.pendingImages ? ", " + this.pendingImages + countPendingStr + ")" : ") " + blankPendingStr);
                 return out;
@@ -129,13 +129,13 @@ module.exports = function(grunt) {
             }
         };
 
-        function createProgressBars(callback) { 
+        function createProgressBars(callback) {
             if(!multi) {
                 return;
             }
 
             var colors = ["red","blue"];
-            function createBar(barCount, callback) { 
+            function createBar(barCount, callback) {
                 callback(multi.rel(maxBarLen, (barCount + 1), {
                     width: 20,
                     solid: {
@@ -148,7 +148,7 @@ module.exports = function(grunt) {
             }
 
             multi.write("↑ Upload:");
-            createBar(0, function(bar) { 
+            createBar(0, function(bar) {
                 downProgress = new Progress(bar);
                 multi.write("\n↓ Download:");
                 createBar(1, function(bar) {
@@ -169,7 +169,7 @@ module.exports = function(grunt) {
         }
 
         function checkDone() {
-            if(imageUploadQueue.length === 0 && activeRequests === 0 && requestQueue.length === 0) { 
+            if(imageUploadQueue.length === 0 && activeRequests === 0 && requestQueue.length === 0) {
                 if(options.checkSigs) {
                     writeFileSigs();
                 }
@@ -180,7 +180,7 @@ module.exports = function(grunt) {
                 if(options.summarize) {
                     var summary = "Skipped: " + skipCount + pluralize(" image", skipCount) + ", " +
                                   "Compressed: " + compressCount + pluralize(" image", compressCount) + ", " +
-                                  "Savings: " + humanize.filesize(inputBytes - outputBytes) + 
+                                  "Savings: " + humanize.filesize(inputBytes - outputBytes) +
                                   " (ratio: " + (inputBytes ? Math.round(outputBytes / inputBytes * 10000) / 10000 : 0) + ')';
                     grunt.log.writeln(summary);
                 }
@@ -199,7 +199,7 @@ module.exports = function(grunt) {
         }
 
         function handleImageCompressComplete(srcpath) {
-            var p = new Promise(function(resolve) { 
+            var p = new Promise(function(resolve) {
                 if(options.checkSigs) {
                     getFileHash(srcpath, function(fp, hash) {
                         updateFileSigs(srcpath, hash);
@@ -214,7 +214,7 @@ module.exports = function(grunt) {
         }
 
         function downloadOutputImage(imageLocation, dest, srcpath) {
-            var p = new Promise(function(resolve, reject) { 
+            var p = new Promise(function(resolve, reject) {
                 var urlInfo = url.parse(imageLocation);
                 urlInfo.accepts = '*/*';
                 urlInfo.rejectUnauthorized = false;
@@ -227,16 +227,16 @@ module.exports = function(grunt) {
                         handleImageError("got bad status code " + imageRes.statusCode);
                     }
 
-                    if(options.showProgress) { 
+                    if(options.showProgress) {
                         imageRes.on('data', function(chunk){
                             downProgress.addProgress(chunk.length).render();
                         });
                     }
 
-                    imageRes.on("end", function() { 
+                    imageRes.on("end", function() {
                         grunt.verbose.writeln("wrote minified image to " + dest);
                         handleImageCompressComplete(srcpath).done(resolve, reject);
-                        if(options.showProgress) { 
+                        if(options.showProgress) {
                             downProgress.addComplete().render();
                         }
                     });
@@ -252,24 +252,24 @@ module.exports = function(grunt) {
         }
 
         function handleAPIResponseSuccess(res, dest, srcpath) {
-            var p = new Promise(function(resolve, reject) { 
+            var p = new Promise(function(resolve, reject) {
                 var imageLocation = res.headers.location;
                 grunt.verbose.writeln("making request to get image at " + imageLocation);
 
                 compressCount++;
                 var resStats = "";
                 res.on("data", function(chunk) { resStats += chunk; });
-                res.on("end", function() { 
+                res.on("end", function() {
                     var statsObj = JSON.parse(resStats);
 
-                    if(options.summarize) { 
+                    if(options.summarize) {
                         outputBytes += statsObj.output.size;
                     }
 
                     // only download the output image if it resulted in a smaller file size
                     // (sometimes tinypng's service results in larger files)
                     if(statsObj.output.size < statsObj.input.size) {
-                        if(options.showProgress) { 
+                        if(options.showProgress) {
                             downProgress.addImage(statsObj.output.size).render();
                         }
                         downloadOutputImage(imageLocation, dest, srcpath).done(resolve, reject);
@@ -285,12 +285,12 @@ module.exports = function(grunt) {
         }
 
         function handleAPIResponseError(res) {
-            var p = new Promise(function(resolve, reject) { 
+            var p = new Promise(function(resolve, reject) {
                 var message = "";
-                res.on("data", function(chunk) { 
+                res.on("data", function(chunk) {
                     message += chunk;
                 });
-                res.on("end", function() { 
+                res.on("end", function() {
                     handleImageError("got error response from api: " + message);
                     reject(message);
                 });
@@ -299,7 +299,7 @@ module.exports = function(grunt) {
         }
 
         function handleAPIResponse(res, dest, srcpath) {
-            requestQueue.push(function() { 
+            requestQueue.push(function() {
                 if(res.statusCode === 201 && !!res.headers.location) {
                     return handleAPIResponseSuccess(res, dest, srcpath);
                 }
@@ -323,23 +323,23 @@ module.exports = function(grunt) {
             if(!expectedHash) {
                 callback(filepath, false);
             }
-            else { 
+            else {
                 getFileHash(filepath, function(fp, hash) {
                     callback(filepath, hash === expectedHash);
                 });
             }
         }
 
-        function processImage(filepath, dest) { 
-            var p = new Promise(function(resolve, reject) { 
+        function processImage(filepath, dest) {
+            var p = new Promise(function(resolve, reject) {
                 grunt.verbose.writeln("Processing image at " + filepath);
                 // make upload image request
-                var req = https.request(reqOpts, function(res) { 
-                    if(options.showProgress) { 
+                var req = https.request(reqOpts, function(res) {
+                    if(options.showProgress) {
                         downProgress.removePending().render();
                     }
                     // upload complete, get the result image response from the api
-                    handleAPIResponse(res, dest, filepath); 
+                    handleAPIResponse(res, dest, filepath);
                     resolve(res);
                 });
 
@@ -353,7 +353,7 @@ module.exports = function(grunt) {
                 // stream the image data as the request POST body
                 var readStream = fs.createReadStream(filepath);
                 readStream.on("end", function() {
-                    if(options.showProgress) { 
+                    if(options.showProgress) {
                         downProgress.addPending().render();
                         upProgress.addComplete().render();
                     }
@@ -362,10 +362,10 @@ module.exports = function(grunt) {
                 readStream.pipe(req);
 
                 // summary output to console
-                if(options.summarize || options.showProgress) { 
+                if(options.summarize || options.showProgress) {
                     var fileSize = fs.statSync(filepath).size;
                     inputBytes += fileSize;
-                    if(options.showProgress) { 
+                    if(options.showProgress) {
                         upProgress.removePending().addImage(fileSize).render();
                         readStream.on('data', function(chunk){
                             upProgress.addProgress(chunk.length).render();
@@ -399,11 +399,11 @@ module.exports = function(grunt) {
         // START
         var that = this;
         var filesReady = [];
-        function init() { 
+        function init() {
             // Iterate over all specified file groups.
             that.files.forEach(function(f) {
                 f.src.forEach(function(filepath) {
-                    filesReady.push(new Promise(function(resolve, reject) { 
+                    filesReady.push(new Promise(function(resolve, reject) {
                         // Warn on and remove invalid source files (if nonull was set).
                         if(!grunt.file.exists(filepath)) {
                             var errMsg = 'Source file "' + filepath + '" not found.';
@@ -415,9 +415,9 @@ module.exports = function(grunt) {
                         if(!grunt.option("force") && options.checkSigs && grunt.file.exists(f.dest)) {
                             grunt.verbose.writeln("comparing hash of image at " + filepath);
                             compareFileHash(filepath, fileSigs[filepath], function(fp, matches) {
-                                if(!matches) { 
+                                if(!matches) {
                                     imageUploadQueue.push([filepath, f.dest]);
-                                    if(options.showProgress) { 
+                                    if(options.showProgress) {
                                         upProgress.addPending();
                                     }
                                 }
@@ -430,16 +430,16 @@ module.exports = function(grunt) {
                         }
                         else {
                             imageUploadQueue.push([filepath, f.dest]);
-                            if(options.showProgress) { 
+                            if(options.showProgress) {
                                 upProgress.addPending();
                             }
                             resolve();
                         }
                     }));
-                }); 
+                });
             });
 
-            Promise.all(filesReady).then(function() { 
+            Promise.all(filesReady).then(function() {
                 while(imageUploadQueue.length > 0 && requestQueue.length < maxRequests) {
                     queueNextUploadImageRequest();
                 }
@@ -452,7 +452,7 @@ module.exports = function(grunt) {
             multi = multimeter(process);
             createProgressBars(init);
         }
-        else { 
+        else {
             init();
         }
 
