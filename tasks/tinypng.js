@@ -412,7 +412,7 @@ module.exports = function(grunt) {
                             return;
                         }
 
-                        if(!grunt.option("force") && options.checkSigs && grunt.file.exists(f.dest)) {
+                        if(!grunt.option("force") && options.checkSigs) {
                             grunt.verbose.writeln("comparing hash of image at " + filepath);
                             compareFileHash(filepath, fileSigs[filepath], function(fp, matches) {
                                 if(!matches) { 
