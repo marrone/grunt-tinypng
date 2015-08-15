@@ -4,6 +4,8 @@ var grunt = require('grunt'),
     fs = require("fs"),
     crypto = require("crypto");
 
+var sigPath = '/tmp/file_sigs.json';
+
 /*
   ======== A Handy Little Nodeunit Reference ========
   https://github.com/caolan/nodeunit
@@ -24,20 +26,7 @@ var grunt = require('grunt'),
     test.ifError(value)
 */
 
-exports.tinypng = {
-  setUp: function(done) {
-    // setup here if necessary
-    done();
-  },
-  test_single: function(test) {
-    test.expect(6);
-
-    var sigPath = '/tmp/file_sigs.json',
-        origImgPath = 'test/fixtures/large.png',
-        minImgPath = '/tmp/large.min.png',
-        doneStats = false,
-        doneSigs = false;
-
+function testImageCompress(test, origImgPath, minImgPath, doneCallback) {
     fs.stat(origImgPath, function(err, origStats) { 
         if(err) {
             throw err;
@@ -54,13 +43,13 @@ exports.tinypng = {
 
             test.ok(minStats.size > 0, "should be greater than 0 bytes");
             test.ok(minStats.size < origStats.size / 2, "minified bytes should be less than half the original");
-            doneStats = true;
-            if(doneStats && doneSigs) {
-                test.done();
-            }
+
+            doneCallback();
         });
     });
+}
 
+function testImageSig(test, sigPath, origImgPath, doneCallback) {
     fs.stat(sigPath, function(err, stats) {
         if(err) {
             throw err;
@@ -85,12 +74,64 @@ exports.tinypng = {
             stream.on("data", function(d) { md5.update(d); });
             stream.on("end", function() {
                 test.equal(md5.digest("hex"), sigs[origImgPath]);
-                doneSigs = true;
-                if(doneStats && doneSigs) {
-                    test.done();
-                }
+                doneCallback();
             });
         });
+    });
+}
+
+exports.tinypng = {
+  setUp: function(done) {
+    // setup here if necessary
+    done();
+  },
+
+  test_single_png: function(test) {
+    test.expect(6);
+
+    var origImgPath = 'test/fixtures/large.png',
+        minImgPath = '/tmp/large.min.png',
+        doneStats = false,
+        doneSigs = false;
+
+    function tryDone() {
+        if(doneStats && doneSigs) {
+            test.done();
+        }
+    }
+
+    testImageCompress(test, origImgPath, minImgPath, function() { 
+        doneStats = true;
+        tryDone();
+    });
+    testImageSig(test, sigPath, origImgPath, function() {
+        doneSigs = true;
+        tryDone();
+    });
+  },
+
+
+  test_single_jpg: function(test) {
+    test.expect(6);
+
+    var origImgPath = 'test/fixtures/wrestling.jpg',
+        minImgPath = '/tmp/wrestling.min.jpg',
+        doneStats = false,
+        doneSigs = false;
+
+    function tryDone() {
+        if(doneStats && doneSigs) {
+            test.done();
+        }
+    }
+
+    testImageCompress(test, origImgPath, minImgPath, function() { 
+        doneStats = true;
+        tryDone();
+    });
+    testImageSig(test, sigPath, origImgPath, function() {
+        doneSigs = true;
+        tryDone();
     });
   }
 };

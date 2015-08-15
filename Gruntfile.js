@@ -37,9 +37,14 @@ module.exports = function(grunt) {
               checkSigs: true,
               sigFile: '/tmp/file_sigs.json'
           },
-          test_single: {
+          test_single_png: {
               files: {
                   '/tmp/large.min.png': 'test/fixtures/large.png'
+              }
+          },
+          test_single_jpg: {
+              files: {
+                  '/tmp/wrestling.min.jpg': 'test/fixtures/wrestling.jpg'
               }
           },
           test_dynamic: {
@@ -47,7 +52,10 @@ module.exports = function(grunt) {
               ext: '.min.png'
           },
           test_dynamic2: {
-              src: ['{large,}.png', '!*.min.png'],
+              options: {
+                  checkSigs: false
+              },
+              src: ['{horse-ranch-small,large,}.png', '!*.min.png'],
               cwd: 'test/fixtures/',
               dest: '/tmp/',
               expand: true,
@@ -56,6 +64,41 @@ module.exports = function(grunt) {
                       fname = path.basename(parts.pop(), ".png");
                   return path.join(dest, fname + '.min.png');
               }
+          },
+          test_dynamic3: {
+              expand: true, src: 'test/fixtures/{large,jeffreed1,horse-ranch-small}.{png,jpg}', dest: '/tmp/',
+              ext: '.min.png'
+          },
+          test_dynamic4: {
+              options: {
+                  stopOnImageError: false
+              },
+              expand: true, src: 'test/fixtures/{large,jeffreed1,horse-ranch-small}.{png,jpg}', dest: '/tmp/',
+              ext: '.min.png'
+          },
+          test_smaller: {
+              options: {
+                showProgress: false,
+                checkSigs: false
+              },
+              expand: true,
+              cwd: "test/fixtures/",
+              src: '{horse-ranch-small,large.min}.png', 
+              ext: ".min.png",
+              dest: '/tmp/'
+          },
+          test_throttle: {
+              options: {
+                showProgress: true,
+                summarize: true,
+                checkSigs: false,
+                sigFile: '/tmp/q_file_sigs.json',
+              },
+              expand: true,
+              cwd: "test/fixtures/",
+              src: '{1,2,3,4,5,6,7,8,9,10}.png', 
+              ext: ".min.png",
+              dest: '/tmp/'
           }
       },
 
@@ -76,7 +119,11 @@ module.exports = function(grunt) {
 
   // Whenever the "test" task is run, first clean the "tmp" dir, then run this
   // plugin's task(s), then test the result.
-  grunt.registerTask('test', ['clean', 'tinypng:test_single', 'nodeunit']);
+  grunt.registerTask('test', ['clean', 'tinypng:test_single_png', 'tinypng:test_single_jpg', 'nodeunit']);
+
+  grunt.registerTask("testerrors", ["clean", "tinypng:test_dynamic3", "jshint"]);
+  grunt.registerTask("testerrors2", ["clean", "tinypng:test_dynamic4", "jshint"]);
+  grunt.registerTask("testq", ["clean", "tinypng:test_throttle"]);
 
   // By default, lint and run all tests.
   grunt.registerTask('default', ['jshint', 'test']);
