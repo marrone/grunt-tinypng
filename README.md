@@ -85,6 +85,7 @@ If False, failures to process images will simply be logged as warnings.
 ### Usage Examples
 
 ```js
+var path = require("path");
 grunt.initConfig({
   tinypng: {
     options: {
