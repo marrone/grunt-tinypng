@@ -99,6 +99,18 @@ module.exports = function(grunt) {
               src: '{1,2,3,4,5,6,7,8,9,10}.png', 
               ext: ".min.png",
               dest: '/tmp/'
+          },
+          test_pretty_sigs: {
+              files: {
+                  '/tmp/large.min.png': 'test/fixtures/large.png',
+                  '/tmp/wrestling.min.jpg': 'test/fixtures/wrestling.jpg'
+              },
+              options: {
+                  checkSigs: true,
+                  sigFile: '/tmp/file_sigs.json',
+                  sigFileSpace: 4,
+                  showProgress: true
+              }
           }
       },
 

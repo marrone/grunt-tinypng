@@ -33,7 +33,8 @@ module.exports = function(grunt) {
             showProgress: false,
             stopOnImageError: true,
             checkSigs: false,
-            sigFile: ''
+            sigFile: '',
+            sigFileSpace: 0
         });
 
         if(options.checkSigs && !options.sigFile) {
@@ -160,7 +161,7 @@ module.exports = function(grunt) {
         }
 
         function writeFileSigs() {
-            grunt.file.write(options.sigFile, JSON.stringify(fileSigs));
+            grunt.file.write(options.sigFile, JSON.stringify(fileSigs, null, options.sigFileSpace));
         }
 
         function updateFileSigs(srcpath, hash) {
