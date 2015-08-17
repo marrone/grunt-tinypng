@@ -17,14 +17,13 @@ module.exports = function(grunt) {
 
     var fs = require("graceful-fs"),
         path = require("path"),
-        humanize = require("humanize"),
         multimeter = require("multimeter"),
         async = require("async"),
         Promise = require("promise"),
         Progress = require("./model/Progress"),
         SigFile = require("./model/SigFile"),
         ImageProcess = require("./model/ImageProcess"),
-        pluralize = require("./util/pluralize");
+        SummaryView = require("./view/Summary");
 
     grunt.registerMultiTask('tinypng', 'image optimization via tinypng service', function() {
 
@@ -51,6 +50,7 @@ module.exports = function(grunt) {
             maxBarLen = 13,
             upProgress,
             downProgress,
+            summaryView = new SummaryView(),
             maxDownloads = 5,
             downloadQueue,
             maxUploads = 5,
@@ -89,28 +89,10 @@ module.exports = function(grunt) {
         }
 
         function summarize() {
-            var compressCount = 0,
-                inputBytes = 0,
-                outputBytes = 0;
-
-            completedImages.forEach(function(img) {
-                if(!img.isFailed) {
-                    compressCount++;
-                    inputBytes += img.fileSize;
-                    if(img.downloadComplete) {
-                        outputBytes += img.compressionStats.output.size;
-                    }
-                    else {
-                        img.outputBytes += img.fileSize;
-                    }
-                }
+            summaryView.render(grunt, {
+                skippedCount: skipCount,
+                completedImages: completedImages
             });
-
-            var summary = "Skipped: " + skipCount + pluralize(" image", skipCount) + ", " +
-                          "Compressed: " + compressCount + pluralize(" image", compressCount) + ", " +
-                          "Savings: " + humanize.filesize(inputBytes - outputBytes) +
-                          " (ratio: " + (inputBytes ? Math.round(outputBytes / inputBytes * 10000) / 10000 : 0) + ')';
-            grunt.log.writeln(summary);
         }
 
         function checkDone() {
