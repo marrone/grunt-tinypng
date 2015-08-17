@@ -2,7 +2,7 @@ var https = require("https"),
     path = require("path"),
     fs = require("graceful-fs"),
     url = require("url"),
-    Promise = require("promise");
+    EventEmitter = require('events').EventEmitter;
 
 var reqOpts = {
     host: 'api.tinypng.com',
@@ -32,21 +32,26 @@ function ImageProcess(srcpath, destpath, apiKey, opts) {
     this.compressedImageUrl = null;
     this.fileSize = 0;
     this.trackProgress = !!opts.trackProgress;
-    this.onUploadStart = opts.onUploadStart || noop;
-    this.onUploadProgress = opts.onUploadProgress || noop;
-    this.onUploadComplete = opts.onUploadComplete || noop;
-    this.onUploadError = opts.onUploadError || noop;
-    this.onDownloadStart = opts.onDownloadStart || noop;
-    this.onDownloadProgress = opts.onDownloadProgress || noop;
-    this.onDownloadComplete = opts.onDownloadComplete || noop;
-    this.onDownloadError = opts.onDownloadError || noop;
+    this.events = new EventEmitter();
 }
+
+var EVENTS = {
+    UPLOAD_START: "uploadStart",
+    UPLOAD_PROGRESS: "uploadProgress",
+    UPLOAD_COMPLETE: "uploadComplete",
+    UPLOAD_FAILED: "uploadFailed",
+    DOWNLOAD_START: "downloadStart",
+    DOWNLOAD_PROGRESS: "downloadProgress",
+    DOWNLOAD_COMPLETE: "downloadComplete",
+    DOWNLOAD_FAILED: "downloadFailed"
+};
+ImageProcess.EVENTS = EVENTS;
 
 ImageProcess.prototype = {
 
     uploadImage: function(callback) {
         this.isUploading = true;
-        this.onUploadStart(this);
+        this.events.emit(EVENTS.UPLOAD_START, this);
 
         // make upload image request
         reqOpts.auth = 'api:' + this.apiKey;
@@ -60,8 +65,8 @@ ImageProcess.prototype = {
             this.isUploading = false;
             this.isFailed = true;
             var errMessage = "problem with request: " + e.message;
-            this.onUploadError(this, errMessage);
             callback(errMessage);
+            this.events.emit(EVENTS.UPLOAD_FAILED, this, errMessage);
         }.bind(this));
 
         // stream the image data as the request POST body
@@ -69,7 +74,7 @@ ImageProcess.prototype = {
 
         if(this.trackProgress) { 
             readStream.on('data', function(chunk) { 
-                this.onUploadProgress(this, chunk); 
+                this.events.emit(EVENTS.UPLOAD_PROGRESS, this, chunk); 
             }.bind(this));
         }
 
@@ -79,7 +84,7 @@ ImageProcess.prototype = {
 
     downloadImage: function(grunt, callback) {
         this.isDownloading = true;
-        this.onDownloadStart(this);
+        this.events.emit(EVENTS.DOWNLOAD_START, this);
 
         var urlInfo = url.parse(this.compressedImageUrl);
         urlInfo.accepts = '*/*';
@@ -91,14 +96,14 @@ ImageProcess.prototype = {
                 this.isDownloading = false;
                 this.isFailed = true;
                 var errMessage = "got bad status code " + imageRes.statusCode;
-                this.onDownloadError(this, errMessage);
                 callback(errMessage);
+                this.events.emit(EVENTS.DOWNLOAD_FAILED, this, errMessage);
                 return;
             }
 
             if(this.trackProgress) { 
                 imageRes.on('data', function(chunk){
-                    this.onDownloadProgress(this, chunk);
+                    this.events.emit(EVENTS.DOWNLOAD_PROGRESS, this, chunk);
                 }.bind(this));
             }
 
@@ -106,8 +111,8 @@ ImageProcess.prototype = {
                 this.isDownloading = false;
                 this.downloadComplete = true;
                 this.isCompleted = true;
-                this.onDownloadComplete(this);
                 callback();
+                this.events.emit(EVENTS.DOWNLOAD_COMPLETE, this);
             }.bind(this));
 
             grunt.file.mkdir(path.dirname(this.destpath));
@@ -117,30 +122,27 @@ ImageProcess.prototype = {
             this.isDownloading = false;
             this.isFailed = true;
             var errMessage = "got error, " + e.message + ", making request for minified image at " + this.compressedImageUrl;
-            this.onDownloadError(this, errMessage);
             callback(errMessage);
+            this.events.emit(EVENTS.DOWNLOAD_FAILED, this, errMessage);
         }.bind(this));
     },
 
-    getCompressionStats: function(res) {
-        var p = new Promise(function(resolve, reject) {
-            var resStats = "";
-            res.on("data", function(chunk) { resStats += chunk; });
-            res.on("end", function() {
-                this.compressionStats = JSON.parse(resStats);
-                resolve(this.compressionStats);
-            }.bind(this));
+    getCompressionStats: function(res, callback) {
+        var resStats = "";
+        res.on("data", function(chunk) { resStats += chunk; });
+        res.on("end", function() {
+            this.compressionStats = JSON.parse(resStats);
+            callback(this.compressionStats);
         }.bind(this));
-        return p;
     },
 
     handleUploadResponse: function(res, callback) {
         if(res.statusCode === 201 && !!res.headers.location) {
             this.compressedImageUrl = res.headers.location;
-            this.getCompressionStats(res).done(function() {
+            this.getCompressionStats(res, function() {
                 this.uploadComplete = true;
-                this.onUploadComplete(this);
                 callback();
+                this.events.emit(EVENTS.UPLOAD_COMPLETE, this);
             }.bind(this));
         }
         else {
@@ -149,8 +151,8 @@ ImageProcess.prototype = {
             res.on("end", function() {
                 this.isFailed = true;
                 var errMessage = "got error response from api: " + message;
-                this.onUploadError(this, errMessage);
                 callback(errMessage);
+                this.events.emit(EVENTS.UPLOAD_FAILED, this, errMessage);
             }.bind(this));
         }
     },

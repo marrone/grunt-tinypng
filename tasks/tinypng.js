@@ -15,14 +15,11 @@ module.exports = function(grunt) {
     // Please see the Grunt documentation for more information regarding task
     // creation: http://gruntjs.com/creating-tasks
 
-    var fs = require("graceful-fs"),
-        path = require("path"),
-        multimeter = require("multimeter"),
-        async = require("async"),
+    var async = require("async"),
         Promise = require("promise"),
-        Progress = require("./model/Progress"),
         SigFile = require("./model/SigFile"),
         ImageProcess = require("./model/ImageProcess"),
+        ProgressView = require("./view/Progress"),
         SummaryView = require("./view/Summary");
 
     grunt.registerMultiTask('tinypng', 'image optimization via tinypng service', function() {
@@ -46,11 +43,7 @@ module.exports = function(grunt) {
         var done = this.async(),
             skipCount = 0,
             fileSigs = new SigFile(options.sigFile, options.checkSigs && grunt.file.exists(options.sigFile) && grunt.file.readJSON(options.sigFile) || {}, options.sigFileSpace),
-            multi,
-            maxBarLen = 13,
-            upProgress,
-            downProgress,
-            summaryView = new SummaryView(),
+            progressView = options.showProgress ? new ProgressView() : null,
             maxDownloads = 5,
             downloadQueue,
             maxUploads = 5,
@@ -58,37 +51,8 @@ module.exports = function(grunt) {
             completedImages = [];
 
 
-        function createProgressBars(callback) {
-            if(!multi) {
-                return;
-            }
-
-            var colors = ["red","blue"];
-            function createBar(barCount, callback) {
-                callback(multi.rel(maxBarLen, (barCount + 1), {
-                    width: 20,
-                    solid: {
-                        text: '|',
-                        foreground: 'white',
-                        background: colors[barCount]
-                    },
-                    empty: {text: ' '}
-                }));
-            }
-
-            multi.write("↑ Upload:");
-            createBar(0, function(bar) {
-                downProgress = new Progress(bar);
-                multi.write("\n↓ Download:");
-                createBar(1, function(bar) {
-                    upProgress = new Progress(bar);
-                    multi.write("\n");
-                    callback();
-                });
-            });
-        }
-
         function summarize() {
+            var summaryView = new SummaryView();
             summaryView.render(grunt, {
                 skippedCount: skipCount,
                 completedImages: completedImages
@@ -97,17 +61,18 @@ module.exports = function(grunt) {
 
         function checkDone() {
             if(uploadQueue.running() === 0 && uploadQueue.length() === 0 && downloadQueue.running() === 0 && downloadQueue.length() === 0) { 
-                if(options.checkSigs) {
-                    fileSigs.save(grunt);
-                }
-                if(multi) {
-                    multi.write("\n");
-                    multi.destroy();
-                }
-                if(options.summarize) {
-                    summarize();
-                }
-                done();
+                async.nextTick(function() {
+                    if(options.checkSigs) {
+                        fileSigs.save(grunt);
+                    }
+                    if(progressView) {
+                        progressView.renderDone();
+                    }
+                    if(options.summarize) {
+                        summarize();
+                    }
+                    done();
+                });
             }
         }
 
@@ -137,20 +102,10 @@ module.exports = function(grunt) {
 
         function handleUploadStart(img) {
             grunt.verbose.writeln("Processing image at " + img.srcpath);
-            if(options.showProgress) {
-                upProgress.removePending().addImage(img.fileSize).render();
-            }
-        }
-
-        function handleUploadProgress(img, chunk) {
-            upProgress.addProgress(chunk.length).render();
         }
 
         function handleUploadComplete(img) {
             if(img.compressionStats.output.size < img.compressionStats.input.size) {
-                if(options.showProgress) {
-                    downProgress.addPending().render();
-                }
                 downloadQueue.push(img);
             }
             else {
@@ -158,45 +113,29 @@ module.exports = function(grunt) {
                 grunt.file.copy(img.srcpath, img.destpath);
                 handleImageProcessComplete(img);
             }
-            if(options.showProgress) {
-                upProgress.addComplete().render();
-            }
         }
 
         function handleDownloadStart(img) {
             grunt.verbose.writeln("making request to get image at " + img.compressedImageUrl);
-            if(options.showProgress) {
-                downProgress.removePending().addImage(img.compressionStats.output.size).render();
-            }
-        }
-
-        function handleDownloadProgress(img, chunk) {
-            downProgress.addProgress(chunk.length).render();
         }
 
         function handleDownloadComplete(img) {
             grunt.verbose.writeln("wrote minified image to " + img.destpath);
             handleImageProcessComplete(img);
-            if(options.showProgress) {
-                downProgress.addComplete().render();
-            }
         }
 
         function createImageProcess(srcpath, destpath) {
+            var img = new ImageProcess(srcpath, destpath, options.apiKey, {trackProgress: options.showProgress});
+            img.events.on(ImageProcess.EVENTS.UPLOAD_START, handleUploadStart);
+            img.events.on(ImageProcess.EVENTS.UPLOAD_COMPLETE, handleUploadComplete);
+            img.events.on(ImageProcess.EVENTS.UPLOAD_FAILED, handleUploadError);
+            img.events.on(ImageProcess.EVENTS.DOWNLOAD_START, handleDownloadStart);
+            img.events.on(ImageProcess.EVENTS.DOWNLOAD_COMPLETE, handleDownloadComplete);
+            img.events.on(ImageProcess.EVENTS.DOWNLOAD_FAILED, handleDownloadError);
             if(options.showProgress) {
-                upProgress.addPending();
+                progressView.addImage(img);
             }
-            return new ImageProcess(srcpath, destpath, options.apiKey, {
-                onUploadStart: handleUploadStart,
-                onUploadProgress: handleUploadProgress,
-                onUploadComplete: handleUploadComplete,
-                onUploadError: handleUploadError,
-                onDownloadStart: handleDownloadStart,
-                onDownloadProgress: handleDownloadProgress,
-                onDownloadComplete: handleDownloadComplete,
-                onDownloadError: handleDownloadError,
-                trackProgress: options.showProgress
-            });
+            return img;
         }
 
         function uploadImage(img, callback) {
@@ -247,7 +186,6 @@ module.exports = function(grunt) {
                             SigFile.compareFileHash(filepath, fileSigs.get(filepath), function(fp, matches) {
                                 if(!matches) {
                                     uploadQueue.push(createImageProcess(filepath, f.dest));
-                                    upProgress.addPending();
                                 }
                                 else {
                                     grunt.verbose.writeln("file sig matches, skipping minification of file at " + filepath);
@@ -258,7 +196,6 @@ module.exports = function(grunt) {
                         }
                         else {
                             uploadQueue.push(createImageProcess(filepath, f.dest));
-                            upProgress.addPending();
                             resolve();
                         }
                     }));
@@ -272,8 +209,7 @@ module.exports = function(grunt) {
         }
 
         if(options.showProgress) {
-            multi = multimeter(process);
-            createProgressBars(init);
+            progressView.init(init);
         }
         else {
             init();
