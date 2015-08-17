@@ -14,6 +14,7 @@ SigFile.prototype = {
     },
     set: function(srcpath, hash) {
         this.fileSigs[srcpath] = hash;
+        return this;
     },
     get: function(srcpath) {
         return this.fileSigs[srcpath];

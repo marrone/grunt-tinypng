@@ -34,11 +34,11 @@ function ImageProcess(srcpath, destpath, apiKey, opts) {
     this.trackProgress = !!opts.trackProgress;
     this.onUploadStart = opts.onUploadStart || noop;
     this.onUploadProgress = opts.onUploadProgress || noop;
-    this.onUploadComplete = opts.onUploadEnd || noop;
+    this.onUploadComplete = opts.onUploadComplete || noop;
     this.onUploadError = opts.onUploadError || noop;
     this.onDownloadStart = opts.onDownloadStart || noop;
     this.onDownloadProgress = opts.onDownloadProgress || noop;
-    this.onDownloadComplete = opts.onDownloadEnd || noop;
+    this.onDownloadComplete = opts.onDownloadComplete || noop;
     this.onDownloadError = opts.onDownloadError || noop;
 }
 

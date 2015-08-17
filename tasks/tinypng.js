@@ -114,7 +114,7 @@ module.exports = function(grunt) {
         }
 
         function checkDone() {
-            if(uploadQueue.running() === 0 && uploadQueue.idle() === 0 && downloadQueue.running() === 0 && downloadQueue.idle() === 0) { 
+            if(uploadQueue.running() === 0 && uploadQueue.length() === 0 && downloadQueue.running() === 0 && downloadQueue.length() === 0) { 
                 if(options.checkSigs) {
                     fileSigs.save(grunt);
                 }
@@ -149,6 +149,7 @@ module.exports = function(grunt) {
             }
             else {
                 grunt.warn(msg);
+                checkDone();
             }
         }
 
@@ -193,7 +194,7 @@ module.exports = function(grunt) {
 
         function handleDownloadComplete(img) {
             grunt.verbose.writeln("wrote minified image to " + img.destpath);
-            handleImageProcessComplete(img.srcpath);
+            handleImageProcessComplete(img);
             if(options.showProgress) {
                 downProgress.addComplete().render();
             }
@@ -226,18 +227,15 @@ module.exports = function(grunt) {
 
         function handleImageProcessComplete(img) {
             completedImages.push(img);
-            var p = new Promise(function(resolve) {
-                if(options.checkSigs) {
-                    SigFile.getFileHash(img.srcpath, function(fp, hash) {
-                        fileSigs.set(img.srcpath, hash).save(grunt);
-                        resolve(img.srcpath);
-                    });
-                }
-                else {
-                    resolve(img.srcpath);
-                }
-            });
-            return p;
+            if(options.checkSigs) {
+                SigFile.getFileHash(img.srcpath, function(fp, hash) {
+                    fileSigs.set(img.srcpath, hash).save(grunt);
+                    checkDone();
+                });
+            }
+            else {
+                checkDone();
+            }
         }
 
 
@@ -267,6 +265,7 @@ module.exports = function(grunt) {
                             SigFile.compareFileHash(filepath, fileSigs.get(filepath), function(fp, matches) {
                                 if(!matches) {
                                     uploadQueue.push(createImageProcess(filepath, f.dest));
+                                    upProgress.addPending();
                                 }
                                 else {
                                     grunt.verbose.writeln("file sig matches, skipping minification of file at " + filepath);
@@ -277,6 +276,7 @@ module.exports = function(grunt) {
                         }
                         else {
                             uploadQueue.push(createImageProcess(filepath, f.dest));
+                            upProgress.addPending();
                             resolve();
                         }
                     }));
