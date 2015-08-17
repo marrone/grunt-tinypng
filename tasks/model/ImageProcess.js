@@ -30,7 +30,7 @@ function ImageProcess(srcpath, destpath, apiKey, opts) {
     this.isCompleted = false;
     this.isFailed = false;
     this.compressedImageUrl = null;
-    this.fileSize = 0;
+    this.fileSize = null;
     this.trackProgress = !!opts.trackProgress;
     this.events = new EventEmitter();
 }
@@ -161,13 +161,28 @@ ImageProcess.prototype = {
         }
     },
 
+    getSourceFileSize: function(callback) {
+        if(this.fileSize === null) {
+            fs.stat(this.srcpath, function(err, stat) {
+                this.fileSize = stat ? stat.size : 0;
+                callback(this.fileSize);
+            }.bind(this));
+        }
+        else { 
+            callback(this.fileSize);
+        }
+    },
 
     process: function(callback) {
         this.isStarted = true;
         if(this.trackProgress) {
-            this.fileSize = fs.statSync(this.srcpath).size;
+            this.getSourceFileSize(function() {
+                this.uploadImage(callback);
+            }.bind(this));
         }
-        this.uploadImage(callback);
+        else {
+            this.uploadImage(callback);
+        }
     }
 
 };

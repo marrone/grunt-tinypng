@@ -3,7 +3,7 @@ var multimeter = require("multimeter"),
     ImageEvents = require("../model/ImageProcess").EVENTS;
 
 var maxBarLen = 13;
-var colors = ["red","blue"];
+var colors = ["green","blue"];
 
 function ProgressView() {
     this.multi = null;
@@ -39,7 +39,7 @@ function createProgressBars(callback) {
 }
 
 function handleUploadStart(img) {
-    this.upProgress.removePending().addImage(img.fileSize).render();
+    this.upProgress.removePending().render();
 }
 
 function handleUploadProgress(img, chunk) {
@@ -74,6 +74,9 @@ ProgressView.prototype = {
 
     addImage: function(imgProc) {
         this.upProgress.addPending();
+        imgProc.getSourceFileSize(function(size) { 
+            this.upProgress.addImage(size);
+        }.bind(this));
         imgProc.events.on(ImageEvents.UPLOAD_START, handleUploadStart.bind(this));
         imgProc.events.on(ImageEvents.UPLOAD_PROGRESS, handleUploadProgress.bind(this));
         imgProc.events.on(ImageEvents.UPLOAD_COMPLETE, handleUploadComplete.bind(this));
