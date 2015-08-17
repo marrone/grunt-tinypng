@@ -105,7 +105,7 @@ module.exports = function(grunt) {
         }
 
         function handleUploadComplete(img) {
-            if(img.compressionStats.output.size < img.compressionStats.input.size) {
+            if(img.shouldDownload()) {
                 downloadQueue.push(img);
             }
             else {

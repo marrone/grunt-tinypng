@@ -136,6 +136,10 @@ ImageProcess.prototype = {
         }.bind(this));
     },
 
+    shouldDownload: function() {
+        return this.compressionStats && this.compressionStats.output.size < this.compressionStats.input.size;
+    },
+
     handleUploadResponse: function(res, callback) {
         if(res.statusCode === 201 && !!res.headers.location) {
             this.compressedImageUrl = res.headers.location;

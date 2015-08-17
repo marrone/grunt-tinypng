@@ -1,6 +1,6 @@
 var pluralize = require("../util/pluralize.js");
 
-function Progress(bar) {
+function ProgressBar(bar) {
     this.bar = bar;
     this.totalImages = 0;
     this.completeImages = 0;
@@ -8,7 +8,7 @@ function Progress(bar) {
     this.totalBytes = 0;
     this.progressBytes = 0;
 }
-Progress.prototype = {
+ProgressBar.prototype = {
     addImage: function(fileSize) {
         this.totalImages++;
         this.addBytes(fileSize);
@@ -59,4 +59,4 @@ Progress.prototype = {
     }
 };
 
-module.exports = Progress;
+module.exports = ProgressBar;

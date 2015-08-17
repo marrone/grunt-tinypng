@@ -1,5 +1,5 @@
 var multimeter = require("multimeter"),
-    ProgressBar = require("../model/Progress"),
+    ProgressBar = require("./ProgressBar"),
     ImageEvents = require("../model/ImageProcess").EVENTS;
 
 var maxBarLen = 13;
@@ -47,7 +47,7 @@ function handleUploadProgress(img, chunk) {
 }
 
 function handleUploadComplete(img) {
-    if(img.compressionStats.output.size < img.compressionStats.input.size) {
+    if(img.shouldDownload()) {
         this.downProgress.addPending().render();
     }
     this.upProgress.addComplete().render();
