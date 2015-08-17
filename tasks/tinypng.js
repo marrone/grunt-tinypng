@@ -19,6 +19,8 @@ module.exports = function(grunt) {
         path = require("path"),
         humanize = require("humanize"),
         multimeter = require("multimeter"),
+        async = require("async"),
+        Promise = require("promise"),
         Progress = require("./model/Progress"),
         SigFile = require("./model/SigFile"),
         ImageProcess = require("./model/ImageProcess"),
@@ -49,10 +51,11 @@ module.exports = function(grunt) {
             maxBarLen = 13,
             upProgress,
             downProgress,
-            imageQueue = [],
-            activeDownloads = 0,
-            activeUploads = 0,
-            maxUploads = 5;
+            maxDownloads = 5,
+            downloadQueue,
+            maxUploads = 5,
+            uploadQueue,
+            completedImages = [];
 
 
         function createProgressBars(callback) {
@@ -85,12 +88,24 @@ module.exports = function(grunt) {
             });
         }
 
-        function updateFileSigs(srcpath, hash) {
-            fileSigs.set(srcpath, hash).save(grunt);
-        }
-
         function summarize() {
-            // @TODO: get stats from the image objects
+            var compressCount = 0,
+                inputBytes = 0,
+                outputBytes = 0;
+
+            completedImages.forEach(function(img) {
+                if(!img.isFailed) {
+                    compressCount++;
+                    inputBytes += img.fileSize;
+                    if(img.downloadComplete) {
+                        outputBytes += img.compressionStats.output.size;
+                    }
+                    else {
+                        img.outputBytes += img.fileSize;
+                    }
+                }
+            });
+
             var summary = "Skipped: " + skipCount + pluralize(" image", skipCount) + ", " +
                           "Compressed: " + compressCount + pluralize(" image", compressCount) + ", " +
                           "Savings: " + humanize.filesize(inputBytes - outputBytes) +
@@ -99,7 +114,7 @@ module.exports = function(grunt) {
         }
 
         function checkDone() {
-            if(imageQueue.length === 0 && activeUploads === 0 && activeDownloads === 0) { 
+            if(uploadQueue.running() === 0 && uploadQueue.idle() === 0 && downloadQueue.running() === 0 && downloadQueue.idle() === 0) { 
                 if(options.checkSigs) {
                     fileSigs.save(grunt);
                 }
@@ -114,16 +129,25 @@ module.exports = function(grunt) {
             }
         }
 
+        function handleDownloadError(img, msg) {
+            handleImageError(img, msg);
+        }
+
+        function handleUploadError(img, msg) {
+            handleImageError(img, msg);
+        }
+
         function handleImageError(img, msg) {
             if(options.stopOnImageError) {
                 if(options.summarizeOnError) {
                     summarize();
                 }
                 grunt.log.error(msg);
+                uploadQueue.kill();
+                downloadQueue.kill();
                 done(false);
             }
             else {
-                // @TODO, allow for kicking off next image
                 grunt.warn(msg);
             }
         }
@@ -142,13 +166,9 @@ module.exports = function(grunt) {
         function handleUploadComplete(img) {
             if(img.compressionStats.output.size < img.compressionStats.input.size) {
                 if(options.showProgress) {
-                    downProgress.addImage(img.compressionStats.output.size).render();
-                }
-                if(showProgress) { 
                     downProgress.addPending().render();
                 }
-                activeDownloads++;
-                img.downloadImage(grunt);
+                downloadQueue.push(img);
             }
             else {
                 grunt.verbose.writeln("output image is larger than source image, copying src " + img.srcpath + " to dest " + img.destpath);
@@ -163,7 +183,7 @@ module.exports = function(grunt) {
         function handleDownloadStart(img) {
             grunt.verbose.writeln("making request to get image at " + img.compressedImageUrl);
             if(options.showProgress) {
-                downProgress.removePending().render();
+                downProgress.removePending().addImage(img.compressionStats.output.size).render();
             }
         }
 
@@ -172,9 +192,8 @@ module.exports = function(grunt) {
         }
 
         function handleDownloadComplete(img) {
-            activeDownloads++;
             grunt.verbose.writeln("wrote minified image to " + img.destpath);
-            handleImageCompressComplete(img.srcpath);
+            handleImageProcessComplete(img.srcpath);
             if(options.showProgress) {
                 downProgress.addComplete().render();
             }
@@ -188,19 +207,29 @@ module.exports = function(grunt) {
                 onUploadStart: handleUploadStart,
                 onUploadProgress: handleUploadProgress,
                 onUploadComplete: handleUploadComplete,
+                onUploadError: handleUploadError,
                 onDownloadStart: handleDownloadStart,
                 onDownloadProgress: handleDownloadProgress,
                 onDownloadComplete: handleDownloadComplete,
-                onError: handleImageError,
+                onDownloadError: handleDownloadError,
                 trackProgress: options.showProgress
             });
         }
 
+        function uploadImage(img, callback) {
+            img.process(callback);
+        }
+
+        function downloadImage(img, callback) {
+            img.downloadImage(grunt, callback);
+        }
+
         function handleImageProcessComplete(img) {
+            completedImages.push(img);
             var p = new Promise(function(resolve) {
                 if(options.checkSigs) {
                     SigFile.getFileHash(img.srcpath, function(fp, hash) {
-                        updateFileSigs(img.srcpath, hash);
+                        fileSigs.set(img.srcpath, hash).save(grunt);
                         resolve(img.srcpath);
                     });
                 }
@@ -211,24 +240,16 @@ module.exports = function(grunt) {
             return p;
         }
 
-        // @TODO replace queue with async module
-        function onQueuedRequestDone() {
-            activeRequests--;
-            checkDone();
-            processQueue();
-        }
-        function dequeueNextImage() {
-            if(imageQueue.length > 0 && activeRequests < maxUploads) {
-                var nextImage = imageQueue.shift();
-                activeRequests++;
-                nextImage.process();
-            }
-        }
 
         // START
         var that = this;
-        var filesReady = [];
         function init() {
+            downloadQueue = async.queue(downloadImage, maxDownloads);
+            uploadQueue = async.queue(uploadImage, maxUploads);
+            uploadQueue.pause();
+
+            var filesReady = [];
+
             // Iterate over all specified file groups.
             that.files.forEach(function(f) {
                 f.src.forEach(function(filepath) {
@@ -245,7 +266,7 @@ module.exports = function(grunt) {
                             grunt.verbose.writeln("comparing hash of image at " + filepath);
                             SigFile.compareFileHash(filepath, fileSigs.get(filepath), function(fp, matches) {
                                 if(!matches) {
-                                    imageQueue.push(createImageProcess(filepath, f.dest));
+                                    uploadQueue.push(createImageProcess(filepath, f.dest));
                                 }
                                 else {
                                     grunt.verbose.writeln("file sig matches, skipping minification of file at " + filepath);
@@ -255,7 +276,7 @@ module.exports = function(grunt) {
                             });
                         }
                         else {
-                            imageQueue.push(createImageProcess(filepath, f.dest));
+                            uploadQueue.push(createImageProcess(filepath, f.dest));
                             resolve();
                         }
                     }));
@@ -263,9 +284,7 @@ module.exports = function(grunt) {
             });
 
             Promise.all(filesReady).then(function() {
-                while(imageQueue.length > 0 && activeUploads < maxUploads) {
-                    dequeueNextImage();
-                }
+                uploadQueue.resume();
                 checkDone();
             });
         }
