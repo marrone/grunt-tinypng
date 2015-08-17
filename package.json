@@ -50,7 +50,8 @@
     "grunt-contrib-nodeunit": "~0.2.2",
     "humanize": "~0.0.9",
     "multimeter": "~0.1.1",
-    "promise": "~4.0.0"
+    "promise": "~4.0.0",
+    "async": "~1.4.2"
   },
   "license": "MIT"
 }

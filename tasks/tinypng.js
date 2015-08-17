@@ -17,12 +17,12 @@ module.exports = function(grunt) {
 
     var fs = require("graceful-fs"),
         path = require("path"),
-        https = require("https"),
-        url = require("url"),
-        crypto = require("crypto"),
         humanize = require("humanize"),
         multimeter = require("multimeter"),
-        Promise = require("promise");
+        Progress = require("./model/Progress"),
+        SigFile = require("./model/SigFile"),
+        ImageProcess = require("./model/ImageProcess"),
+        pluralize = require("./util/pluralize");
 
     grunt.registerMultiTask('tinypng', 'image optimization via tinypng service', function() {
 
@@ -30,6 +30,7 @@ module.exports = function(grunt) {
         var options = this.options({
             apiKey: '',
             summarize: false,
+            summarizeOnError: false,
             showProgress: false,
             stopOnImageError: true,
             checkSigs: false,
@@ -43,92 +44,16 @@ module.exports = function(grunt) {
 
         var done = this.async(),
             skipCount = 0,
-            compressCount = 0,
-            inputBytes = 0,
-            outputBytes = 0,
-            reqOpts = {
-                host: 'api.tinypng.com',
-                port: 443,
-                path: '/shrink',
-                method: 'POST',
-                accepts: '*/*',
-                rejectUnauthorized: false,
-                requestCert: true,
-                agent: false,
-                auth: 'api:' + options.apiKey
-            },
-            fileSigs = options.checkSigs && grunt.file.exists(options.sigFile) && grunt.file.readJSON(options.sigFile) || {},
+            fileSigs = new SigFile(options.sigFile, options.checkSigs && grunt.file.exists(options.sigFile) && grunt.file.readJSON(options.sigFile) || {}, options.sigFileSpace),
             multi,
             maxBarLen = 13,
             upProgress,
             downProgress,
-            imageUploadQueue = [],
-            requestQueue = [],
-            activeRequests = 0,
-            maxRequests = 5;
+            imageQueue = [],
+            activeDownloads = 0,
+            activeUploads = 0,
+            maxUploads = 5;
 
-        function pluralize(text, num) {
-            return text + (num === 1 ? "" : "s");
-        }
-
-        function Progress(bar) {
-            this.bar = bar;
-            this.totalImages = 0;
-            this.completeImages = 0;
-            this.pendingImages = 0;
-            this.totalBytes = 0;
-            this.progressBytes = 0;
-        }
-        Progress.prototype = {
-            addImage: function(fileSize) {
-                this.totalImages++;
-                this.addBytes(fileSize);
-                return this;
-            },
-            addBytes: function(bytes) {
-                this.totalBytes += bytes || 0;
-                return this;
-            },
-            addProgress: function(fileSize) {
-                this.progressBytes += fileSize;
-                return this;
-            },
-            addComplete: function() {
-                this.completeImages++;
-                return this;
-            },
-            addPending: function() {
-                this.pendingImages++;
-                return this;
-            },
-            removePending: function() {
-                this.pendingImages--;
-                return this;
-            },
-            formatPerc: function(prog, total) {
-                return this.totalBytes ? Math.round(this.progressBytes / this.totalBytes * 100) : 0;
-            },
-            toString: function() {
-                var perc = this.formatPerc(),
-                    percStr = perc;
-                if(perc < 10) { percStr = "  " + percStr; }
-                else if(perc < 100) { percStr = " " + percStr; }
-
-                var countPendingStr = " pending";
-                var blankPendingStr = "                    "; // hacky way to clear the multimeter trailing text
-                var out = percStr + "% (" +
-                          this.completeImages + "/" + this.totalImages +
-                          pluralize(" image", this.totalImages) +
-                          (this.pendingImages ? ", " + this.pendingImages + countPendingStr + ")" : ") " + blankPendingStr);
-                return out;
-            },
-            render: function() {
-                var perc = this.formatPerc();
-                var msg = this.toString();
-                this.bar.percent(perc, msg);
-                return this;
-            }
-        };
 
         function createProgressBars(callback) {
             if(!multi) {
@@ -160,240 +85,143 @@ module.exports = function(grunt) {
             });
         }
 
-        function writeFileSigs() {
-            grunt.file.write(options.sigFile, JSON.stringify(fileSigs, null, options.sigFileSpace));
+        function updateFileSigs(srcpath, hash) {
+            fileSigs.set(srcpath, hash).save(grunt);
         }
 
-        function updateFileSigs(srcpath, hash) {
-            fileSigs[srcpath] = hash;
-            writeFileSigs();
+        function summarize() {
+            // @TODO: get stats from the image objects
+            var summary = "Skipped: " + skipCount + pluralize(" image", skipCount) + ", " +
+                          "Compressed: " + compressCount + pluralize(" image", compressCount) + ", " +
+                          "Savings: " + humanize.filesize(inputBytes - outputBytes) +
+                          " (ratio: " + (inputBytes ? Math.round(outputBytes / inputBytes * 10000) / 10000 : 0) + ')';
+            grunt.log.writeln(summary);
         }
 
         function checkDone() {
-            if(imageUploadQueue.length === 0 && activeRequests === 0 && requestQueue.length === 0) {
+            if(imageQueue.length === 0 && activeUploads === 0 && activeDownloads === 0) { 
                 if(options.checkSigs) {
-                    writeFileSigs();
+                    fileSigs.save(grunt);
                 }
                 if(multi) {
                     multi.write("\n");
                     multi.destroy();
                 }
                 if(options.summarize) {
-                    var summary = "Skipped: " + skipCount + pluralize(" image", skipCount) + ", " +
-                                  "Compressed: " + compressCount + pluralize(" image", compressCount) + ", " +
-                                  "Savings: " + humanize.filesize(inputBytes - outputBytes) +
-                                  " (ratio: " + (inputBytes ? Math.round(outputBytes / inputBytes * 10000) / 10000 : 0) + ')';
-                    grunt.log.writeln(summary);
+                    summarize();
                 }
                 done();
             }
         }
 
-        function handleImageError(msg) {
+        function handleImageError(img, msg) {
             if(options.stopOnImageError) {
+                if(options.summarizeOnError) {
+                    summarize();
+                }
                 grunt.log.error(msg);
                 done(false);
             }
             else {
-                grunt.log.warn(msg);
+                // @TODO, allow for kicking off next image
+                grunt.warn(msg);
             }
         }
 
-        function handleImageCompressComplete(srcpath) {
-            var p = new Promise(function(resolve) {
-                if(options.checkSigs) {
-                    getFileHash(srcpath, function(fp, hash) {
-                        updateFileSigs(srcpath, hash);
-                        resolve(srcpath);
-                    });
+        function handleUploadStart(img) {
+            grunt.verbose.writeln("Processing image at " + img.srcpath);
+            if(options.showProgress) {
+                upProgress.removePending().addImage(img.fileSize).render();
+            }
+        }
+
+        function handleUploadProgress(img, chunk) {
+            upProgress.addProgress(chunk.length).render();
+        }
+
+        function handleUploadComplete(img) {
+            if(img.compressionStats.output.size < img.compressionStats.input.size) {
+                if(options.showProgress) {
+                    downProgress.addImage(img.compressionStats.output.size).render();
                 }
-                else {
-                    resolve(srcpath);
+                if(showProgress) { 
+                    downProgress.addPending().render();
                 }
-            });
-            return p;
-        }
-
-        function downloadOutputImage(imageLocation, dest, srcpath) {
-            var p = new Promise(function(resolve, reject) {
-                var urlInfo = url.parse(imageLocation);
-                urlInfo.accepts = '*/*';
-                urlInfo.rejectUnauthorized = false;
-                urlInfo.requestCert = true;
-
-                https.get(urlInfo, function(imageRes) {
-                    grunt.verbose.writeln("minified image request response status code is " + imageRes.statusCode);
-
-                    if(imageRes.statusCode >= 300) {
-                        handleImageError("got bad status code " + imageRes.statusCode);
-                    }
-
-                    if(options.showProgress) {
-                        imageRes.on('data', function(chunk){
-                            downProgress.addProgress(chunk.length).render();
-                        });
-                    }
-
-                    imageRes.on("end", function() {
-                        grunt.verbose.writeln("wrote minified image to " + dest);
-                        handleImageCompressComplete(srcpath).done(resolve, reject);
-                        if(options.showProgress) {
-                            downProgress.addComplete().render();
-                        }
-                    });
-                    grunt.file.mkdir(path.dirname(dest));
-                    imageRes.pipe(fs.createWriteStream(dest));
-
-                }).on("error", function(e) {
-                    handleImageError("got error, " + e.message + ", making request for minified image at " + imageLocation);
-                    reject(e.message);
-                });
-            });
-            return p;
-        }
-
-        function handleAPIResponseSuccess(res, dest, srcpath) {
-            var p = new Promise(function(resolve, reject) {
-                var imageLocation = res.headers.location;
-                grunt.verbose.writeln("making request to get image at " + imageLocation);
-
-                compressCount++;
-                var resStats = "";
-                res.on("data", function(chunk) { resStats += chunk; });
-                res.on("end", function() {
-                    var statsObj = JSON.parse(resStats);
-
-                    if(options.summarize) {
-                        outputBytes += statsObj.output.size;
-                    }
-
-                    // only download the output image if it resulted in a smaller file size
-                    // (sometimes tinypng's service results in larger files)
-                    if(statsObj.output.size < statsObj.input.size) {
-                        if(options.showProgress) {
-                            downProgress.addImage(statsObj.output.size).render();
-                        }
-                        downloadOutputImage(imageLocation, dest, srcpath).done(resolve, reject);
-                    }
-                    else {
-                        grunt.verbose.writeln("output image is larger than source image, copying src " + srcpath + " to dest " + dest);
-                        grunt.file.copy(srcpath, dest);
-                        handleImageCompressComplete(srcpath).done(resolve, reject);
-                    }
-                });
-            });
-            return p;
-        }
-
-        function handleAPIResponseError(res) {
-            var p = new Promise(function(resolve, reject) {
-                var message = "";
-                res.on("data", function(chunk) {
-                    message += chunk;
-                });
-                res.on("end", function() {
-                    handleImageError("got error response from api: " + message);
-                    reject(message);
-                });
-            });
-            return p;
-        }
-
-        function handleAPIResponse(res, dest, srcpath) {
-            requestQueue.push(function() {
-                if(res.statusCode === 201 && !!res.headers.location) {
-                    return handleAPIResponseSuccess(res, dest, srcpath);
-                }
-                else {
-                    return handleAPIResponseError(res);
-                }
-            });
-            queueNextUploadImageRequest();
-        }
-
-        function getFileHash(filepath, callback) {
-            var md5 = crypto.createHash("md5"),
-                stream = fs.ReadStream(filepath);
-            stream.on("data", function(d) { md5.update(d); });
-            stream.on("end", function() {
-                callback(filepath, md5.digest("hex"));
-            });
-        }
-
-        function compareFileHash(filepath, expectedHash, callback) {
-            if(!expectedHash) {
-                callback(filepath, false);
+                activeDownloads++;
+                img.downloadImage(grunt);
             }
             else {
-                getFileHash(filepath, function(fp, hash) {
-                    callback(filepath, hash === expectedHash);
-                });
+                grunt.verbose.writeln("output image is larger than source image, copying src " + img.srcpath + " to dest " + img.destpath);
+                grunt.file.copy(img.srcpath, img.destpath);
+                handleImageProcessComplete(img);
+            }
+            if(options.showProgress) {
+                upProgress.addComplete().render();
             }
         }
 
-        function processImage(filepath, dest) {
-            var p = new Promise(function(resolve, reject) {
-                grunt.verbose.writeln("Processing image at " + filepath);
-                // make upload image request
-                var req = https.request(reqOpts, function(res) {
-                    if(options.showProgress) {
-                        downProgress.removePending().render();
-                    }
-                    // upload complete, get the result image response from the api
-                    handleAPIResponse(res, dest, filepath);
-                    resolve(res);
-                });
+        function handleDownloadStart(img) {
+            grunt.verbose.writeln("making request to get image at " + img.compressedImageUrl);
+            if(options.showProgress) {
+                downProgress.removePending().render();
+            }
+        }
 
-                // upload fail
-                req.on("error", function(e) {
-                    handleImageError("problem with request: " + e.message);
-                    reject(e.message);
-                    queueNextUploadImageRequest();
-                });
+        function handleDownloadProgress(img, chunk) {
+            downProgress.addProgress(chunk.length).render();
+        }
 
-                // stream the image data as the request POST body
-                var readStream = fs.createReadStream(filepath);
-                readStream.on("end", function() {
-                    if(options.showProgress) {
-                        downProgress.addPending().render();
-                        upProgress.addComplete().render();
-                    }
-                    req.end();
-                });
-                readStream.pipe(req);
+        function handleDownloadComplete(img) {
+            activeDownloads++;
+            grunt.verbose.writeln("wrote minified image to " + img.destpath);
+            handleImageCompressComplete(img.srcpath);
+            if(options.showProgress) {
+                downProgress.addComplete().render();
+            }
+        }
 
-                // summary output to console
-                if(options.summarize || options.showProgress) {
-                    var fileSize = fs.statSync(filepath).size;
-                    inputBytes += fileSize;
-                    if(options.showProgress) {
-                        upProgress.removePending().addImage(fileSize).render();
-                        readStream.on('data', function(chunk){
-                            upProgress.addProgress(chunk.length).render();
-                        });
-                    }
+        function createImageProcess(srcpath, destpath) {
+            if(options.showProgress) {
+                upProgress.addPending();
+            }
+            return new ImageProcess(srcpath, destpath, options.apiKey, {
+                onUploadStart: handleUploadStart,
+                onUploadProgress: handleUploadProgress,
+                onUploadComplete: handleUploadComplete,
+                onDownloadStart: handleDownloadStart,
+                onDownloadProgress: handleDownloadProgress,
+                onDownloadComplete: handleDownloadComplete,
+                onError: handleImageError,
+                trackProgress: options.showProgress
+            });
+        }
+
+        function handleImageProcessComplete(img) {
+            var p = new Promise(function(resolve) {
+                if(options.checkSigs) {
+                    SigFile.getFileHash(img.srcpath, function(fp, hash) {
+                        updateFileSigs(img.srcpath, hash);
+                        resolve(img.srcpath);
+                    });
+                }
+                else {
+                    resolve(img.srcpath);
                 }
             });
             return p;
         }
 
+        // @TODO replace queue with async module
         function onQueuedRequestDone() {
             activeRequests--;
             checkDone();
             processQueue();
         }
-        function processQueue() {
-            while(requestQueue.length > 0 && activeRequests < maxRequests) {
+        function dequeueNextImage() {
+            if(imageQueue.length > 0 && activeRequests < maxUploads) {
+                var nextImage = imageQueue.shift();
                 activeRequests++;
-                requestQueue.shift()().done(onQueuedRequestDone, onQueuedRequestDone);
-            }
-        }
-        function queueNextUploadImageRequest(srcpath, dest) {
-            if(imageUploadQueue.length > 0) {
-                var nextImageData = imageUploadQueue.shift();
-                requestQueue.push(function() {
-                    return processImage.apply(null, nextImageData);
-                });
+                nextImage.process();
             }
         }
 
@@ -415,12 +243,9 @@ module.exports = function(grunt) {
 
                         if(!grunt.option("force") && options.checkSigs && grunt.file.exists(f.dest)) {
                             grunt.verbose.writeln("comparing hash of image at " + filepath);
-                            compareFileHash(filepath, fileSigs[filepath], function(fp, matches) {
+                            SigFile.compareFileHash(filepath, fileSigs.get(filepath), function(fp, matches) {
                                 if(!matches) {
-                                    imageUploadQueue.push([filepath, f.dest]);
-                                    if(options.showProgress) {
-                                        upProgress.addPending();
-                                    }
+                                    imageQueue.push(createImageProcess(filepath, f.dest));
                                 }
                                 else {
                                     grunt.verbose.writeln("file sig matches, skipping minification of file at " + filepath);
@@ -430,10 +255,7 @@ module.exports = function(grunt) {
                             });
                         }
                         else {
-                            imageUploadQueue.push([filepath, f.dest]);
-                            if(options.showProgress) {
-                                upProgress.addPending();
-                            }
+                            imageQueue.push(createImageProcess(filepath, f.dest));
                             resolve();
                         }
                     }));
@@ -441,10 +263,9 @@ module.exports = function(grunt) {
             });
 
             Promise.all(filesReady).then(function() {
-                while(imageUploadQueue.length > 0 && requestQueue.length < maxRequests) {
-                    queueNextUploadImageRequest();
+                while(imageQueue.length > 0 && activeUploads < maxUploads) {
+                    dequeueNextImage();
                 }
-                processQueue();
                 checkDone();
             });
         }

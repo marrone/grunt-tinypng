@@ -30,15 +30,15 @@ function testImageCompress(test, origImgPath, minImgPath, doneCallback) {
     fs.stat(origImgPath, function(err, origStats) { 
         if(err) {
             throw err;
-            test.done();
-            return;
+            //test.done();
+            //return;
         }
 
         fs.stat(minImgPath, function(err, minStats) { 
             if(err) {
                 throw err;
-                test.done();
-                return;
+                //test.done();
+                //return;
             }
 
             test.ok(minStats.size > 0, "should be greater than 0 bytes");
@@ -53,15 +53,15 @@ function testImageSig(test, sigPath, origImgPath, doneCallback) {
     fs.stat(sigPath, function(err, stats) {
         if(err) {
             throw err;
-            test.done();
-            return;
+            //test.done();
+            //return;
         }
 
         fs.readFile(sigPath, function(err, data) {
             if(err) {
                 throw err;
-                test.done();
-                return;
+                //test.done();
+                //return;
             }
 
             var sigs = JSON.parse(data);
