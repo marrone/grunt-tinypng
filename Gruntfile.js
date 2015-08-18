@@ -48,8 +48,7 @@ module.exports = function(grunt) {
               }
           },
           test_dynamic: {
-              expand: true, src: 'test/fixtures/{horse-ranch,pettirosso_2,large}.png', dest: '/tmp/',
-              ext: '.min.png'
+              expand: true, src: 'test/fixtures/{horse-ranch,pettirosso_2,large}.png', dest: '/tmp/'
           },
           test_dynamic2: {
               options: {
@@ -66,8 +65,8 @@ module.exports = function(grunt) {
               }
           },
           test_dynamic3: {
-              expand: true, src: 'test/fixtures/{large,jeffreed1,horse-ranch-small}.{png,jpg}', dest: '/tmp/',
-              ext: '.min.png'
+              expand: true, src: 'test/fixtures/{ninja,jeffreed1,horse-ranch-small}.{png,jpg,gif}', dest: '/tmp/',
+              options: { summarizeOnError: true }
           },
           test_dynamic4: {
               options: {
@@ -109,7 +108,8 @@ module.exports = function(grunt) {
                   checkSigs: true,
                   sigFile: '/tmp/file_sigs.json',
                   sigFileSpace: 4,
-                  showProgress: true
+                  showProgress: true,
+                  summarize: true
               }
           }
       },
