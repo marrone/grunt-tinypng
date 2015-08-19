@@ -76,6 +76,12 @@ Default value: `false`
 If True, will print a stats summary of number of images skipped, number compressed and the bytes saved, e.g.)
 `Skipped: 1 image, Compressed: 1 image, Savings: 153.86 KB (ratio: 0.1999)`
 
+#### options.summarizeOnError
+Type: `Boolean`
+Default value: `false`
+
+If True, will print a stats summary (same as described in `summarize`) of what was completed up to when the task is stopped due to an error.
+
 #### options.showProgress
 Type: `Boolean`
 Default value: `false`
@@ -88,7 +94,7 @@ Type: `Boolean`
 Default value: `true`
 
 If True, will failures to process an image will result in a grunt error and abort further task execution (unless --force is specified).
-If False, failures to process images will simply be logged as warnings.
+If False, failures to process images will simply be logged to the verbose logging.
 
 ####
 ### Usage Examples
