@@ -107,16 +107,20 @@ ImageProcess.prototype = {
                 }.bind(this));
             }
 
-            imageRes.on("end", function() {
+            grunt.file.mkdir(path.dirname(this.destpath));
+            var writeStream = fs.createWriteStream(this.destpath);
+            writeStream.on('finish', function() {
                 this.isDownloading = false;
                 this.downloadComplete = true;
                 this.isCompleted = true;
                 callback();
                 this.events.emit(EVENTS.DOWNLOAD_COMPLETE, this);
             }.bind(this));
+            imageRes.on("end", function() {
+                writeStream.end();
+            }.bind(this));
 
-            grunt.file.mkdir(path.dirname(this.destpath));
-            imageRes.pipe(fs.createWriteStream(this.destpath));
+            imageRes.pipe(writeStream);
 
         }.bind(this)).on("error", function(e) {
             this.isDownloading = false;
