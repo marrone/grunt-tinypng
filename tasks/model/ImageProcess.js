@@ -18,10 +18,11 @@ var reqOpts = {
 var noop = function(){};
 
 
-function ImageProcess(srcpath, destpath, apiKey, opts) {
+function ImageProcess(srcpath, destpath, apiKey, opts, agent) {
     this.apiKey = apiKey;
     this.srcpath = srcpath;
     this.destpath = destpath;
+    this.agent = agent;
     this.isUploading = false;
     this.uploadComplete = false;
     this.isDownloading = false;
@@ -52,9 +53,9 @@ ImageProcess.prototype = {
     uploadImage: function(callback) {
         this.isUploading = true;
         this.events.emit(EVENTS.UPLOAD_START, this);
-
         // make upload image request
         reqOpts.auth = 'api:' + this.apiKey;
+        reqOpts.agent = this.agent;
         var req = https.request(reqOpts, function(res) {
             this.isUploading = false;
             this.handleUploadResponse(res, callback);
@@ -90,6 +91,7 @@ ImageProcess.prototype = {
         urlInfo.accepts = '*/*';
         urlInfo.rejectUnauthorized = false;
         urlInfo.requestCert = true;
+        urlInfo.agent = this.agent;
 
         https.get(urlInfo, function(imageRes) {
             if(imageRes.statusCode >= 300) {

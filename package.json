@@ -31,7 +31,8 @@
     "grunt-contrib-nodeunit": "~0.2.0",
     "humanize": "~0.0.9",
     "multimeter": "~0.1.1",
-    "promise": "~4.0.0"
+    "promise": "~4.0.0",
+    "https-proxy-agent": "~1.0.0"
   },
   "peerDependencies": {
     "grunt": "~0.4.1"
@@ -51,7 +52,8 @@
     "humanize": "~0.0.9",
     "multimeter": "~0.1.1",
     "promise": "~4.0.0",
-    "async": "~1.4.2"
+    "async": "~1.4.2",
+    "https-proxy-agent": "~1.0.0"
   },
   "license": "MIT"
 }
