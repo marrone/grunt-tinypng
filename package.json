@@ -1,20 +1,20 @@
 {
-  "name": "grunt-tinypng",
+  "name": "grunt-tinypng-proxy",
   "description": "image optimization via tinypng service",
-  "version": "0.6.1",
-  "homepage": "https://github.com/marrone/grunt-tinypng",
-  "author": "Mike M <mmarrone@pch.com>",
+  "version": "0.6.3",
+  "homepage": "https://github.com/stivon/grunt-tinypng-proxy",
+  "author": "Steven L <slassausse-ext@lequipe.fr>",
   "repository": {
     "type": "git",
-    "url": "git://github.com/marrone/grunt-tinypng.git"
+    "url": "git://github.com/stivon/grunt-tinypng-proxy.git"
   },
   "bugs": {
-    "url": "https://github.com/marrone/grunt-tinypng/issues"
+    "url": "https://github.com/stivon/grunt-tinypng-proxy/issues"
   },
   "licenses": [
     {
       "type": "MIT",
-      "url": "https://github.com/marrone/grunt-tinypng/blob/master/LICENSE-MIT"
+      "url": "https://github.com/stivon/grunt-tinypng-proxy/blob/master/LICENSE-MIT"
     }
   ],
   "main": "Gruntfile.js",
@@ -31,8 +31,8 @@
     "grunt-contrib-nodeunit": "~0.2.0",
     "humanize": "~0.0.9",
     "multimeter": "~0.1.1",
-    "promise": "~4.0.0",
-    "https-proxy-agent": "~1.0.0"
+    "https-proxy-agent": "~1.0.0",
+    "promise": "~4.0.0"
   },
   "peerDependencies": {
     "grunt": "~0.4.1"
@@ -51,9 +51,9 @@
     "grunt-contrib-nodeunit": "~0.2.2",
     "humanize": "~0.0.9",
     "multimeter": "~0.1.1",
+    "https-proxy-agent": "~1.0.0",
     "promise": "~4.0.0",
-    "async": "~1.4.2",
-    "https-proxy-agent": "~1.0.0"
+    "async": "~1.4.2"
   },
   "license": "MIT"
 }

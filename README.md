@@ -8,7 +8,7 @@ This plugin requires Grunt `~0.4.2`
 If you haven't used [Grunt](http://gruntjs.com/) before, be sure to check out the [Getting Started](http://gruntjs.com/getting-started) guide, as it explains how to create a [Gruntfile](http://gruntjs.com/sample-gruntfile) as well as install and use Grunt plugins. Once you're familiar with that process, you may install this plugin with this command:
 
 ```shell
-npm install grunt-tinypng --save-dev
+npm install grunt-tinypng-proxy --save-dev
 ```
 
 Once the plugin has been installed, it may be enabled inside your Gruntfile with this line of JavaScript:
@@ -95,6 +95,13 @@ Default value: `true`
 
 If True, will failures to process an image will result in a grunt error and abort further task execution (unless --force is specified).
 If False, failures to process images will simply be logged to the verbose logging.
+
+#### options.proxy
+Type: `String`
+Default value: `false`
+
+Define the url proxy
+
 
 ####
 ### Usage Examples
