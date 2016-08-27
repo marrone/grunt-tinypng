@@ -96,6 +96,13 @@ Default value: `true`
 If True, will failures to process an image will result in a grunt error and abort further task execution (unless --force is specified).
 If False, failures to process images will simply be logged to the verbose logging.
 
+#### options.proxy
+Type: `String`
+Default value: `false`
+
+Define the url proxy
+
+
 ####
 ### Usage Examples
 

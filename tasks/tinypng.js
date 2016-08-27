@@ -20,7 +20,8 @@ module.exports = function(grunt) {
         SigFile = require("./model/SigFile"),
         ImageProcess = require("./model/ImageProcess"),
         ProgressView = require("./view/Progress"),
-        SummaryView = require("./view/Summary");
+        SummaryView = require("./view/Summary"),
+        HttpsProxyAgent = require('https-proxy-agent');
 
     grunt.registerMultiTask('tinypng', 'image optimization via tinypng service', function() {
 
@@ -33,8 +34,11 @@ module.exports = function(grunt) {
             stopOnImageError: true,
             checkSigs: false,
             sigFile: '',
-            sigFileSpace: 0
+            sigFileSpace: 0,
+            proxy:false
         });
+
+        var agent = options.proxy !== false ? new HttpsProxyAgent(options.proxy) : false;
 
         if(options.checkSigs && !options.sigFile) {
             grunt.log.error("sigFile option required when specifying checkSigs option");
@@ -126,7 +130,7 @@ module.exports = function(grunt) {
         }
 
         function createImageProcess(srcpath, destpath) {
-            var img = new ImageProcess(srcpath, destpath, options.apiKey, {trackProgress: options.showProgress});
+            var img = new ImageProcess(srcpath, destpath, options.apiKey, {trackProgress: options.showProgress}, agent);
             img.events.on(ImageProcess.EVENTS.UPLOAD_START, handleUploadStart);
             img.events.on(ImageProcess.EVENTS.UPLOAD_COMPLETE, handleUploadComplete);
             img.events.on(ImageProcess.EVENTS.UPLOAD_FAILED, handleUploadError);
