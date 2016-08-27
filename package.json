@@ -4,6 +4,11 @@
   "version": "0.7.0",
   "homepage": "https://github.com/marrone/grunt-tinypng",
   "author": "Mike M <mmarrone@pch.com>",
+  "contributors": [
+    {"name": "Mr. Hyde", "url": "https://github.com/mrhyde"},
+    {"name": "Christian Holm", "url": "https://github.com/holm"},
+    {"name": "stivon", "url": "https://github.com/stivon"}
+  ],
   "repository": {
     "type": "git",
     "url": "git://github.com/marrone/grunt-tinypng.git"
