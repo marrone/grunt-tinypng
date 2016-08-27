@@ -25,16 +25,13 @@
     "test": "grunt test"
   },
   "devDependencies": {
-    "grunt": "~0.4.1",
-    "grunt-contrib-clean": "~0.4.0",
-    "grunt-contrib-jshint": "~0.6.0",
-    "grunt-contrib-nodeunit": "~0.2.0",
-    "humanize": "~0.0.9",
-    "multimeter": "~0.1.1",
-    "promise": "~4.0.0"
+    "grunt": "^1.0.1",
+    "grunt-contrib-clean": "^1.0.0",
+    "grunt-contrib-jshint": "^1.0.0",
+    "grunt-contrib-nodeunit": "^1.0.0"
   },
   "peerDependencies": {
-    "grunt": "~0.4.1"
+    "grunt": ">=0.4.2"
   },
   "keywords": [
     "gruntplugin"
@@ -43,15 +40,11 @@
     "test": "test"
   },
   "dependencies": {
-    "graceful-fs": "^3.0.6",
-    "grunt": "~0.4.1",
-    "grunt-contrib-clean": "~0.4.1",
-    "grunt-contrib-jshint": "~0.6.5",
-    "grunt-contrib-nodeunit": "~0.2.2",
+    "async": "^2.0.1",
+    "graceful-fs": "^4.1.6",
     "humanize": "~0.0.9",
     "multimeter": "~0.1.1",
-    "promise": "~4.0.0",
-    "async": "~1.4.2"
+    "promise": "^7.1.1"
   },
   "license": "MIT"
 }
